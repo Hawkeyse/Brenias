@@ -19,7 +19,7 @@ const shopCfg = require('./halloweenShopConfig');
 const SCARE_CHANCE = 0.02;                   // 2% of messages roll a scare (only after cooldowns pass)
 const GUILD_COOLDOWN_MS = 30 * 60 * 1000;    // at most 1 scare per server every 30 min
 const CHANNEL_COOLDOWN_MS = 60 * 60 * 1000;  // and at most 1 per channel every hour
-const DELETE_AFTER_MS = 5 * 1000;            // scare disappears after 5 seconds
+const DELETE_AFTER_MS = 9 * 1000;            // scare disappears after 9 seconds
 const MAX_FILE_BYTES = 8 * 1024 * 1024;      // bigger GIFs may fail to upload — skipped
 
 // Channels scares may appear in. Empty = every normal text channel.
