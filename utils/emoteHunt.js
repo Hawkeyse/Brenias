@@ -107,9 +107,6 @@ async function startEmoteHunt(client, { force = false } = {}) {
     hunt.announcementMessageId = message.id;
     hunt.active = true;
     await hunt.save();
-    await message.react(target.id).catch((err) => {
-      console.error('[emoteHunt] Could not seed target reaction:', err.message);
-    });
     await logEmoteHuntStarted(client, {
       channelId: channel.id,
       emoteName: target.name,
