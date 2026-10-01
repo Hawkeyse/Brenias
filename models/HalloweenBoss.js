@@ -22,6 +22,7 @@ const halloweenBossSchema = new mongoose.Schema({
   maxHP: { type: Number, required: true },
   currentHP: { type: Number, required: true },
   active: { type: Boolean, default: true },
+  endedByStaff: { type: Boolean, default: false },
   startedAt: { type: Date, default: Date.now },
   endedAt: { type: Date, default: null },
   participants: { type: [participantSchema], default: [] },

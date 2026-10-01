@@ -1,89 +1,169 @@
-const { SlashCommandBuilder } = require('discord.js');
+const fs = require('fs');
+const path = require('path');
+const { SlashCommandBuilder, EmbedBuilder, AttachmentBuilder } = require('discord.js');
 const HalloweenTrickOrTreat = require('../models/HalloweenTrickOrTreat');
 const User = require('../models/User');
-const { addHalloweenPoints, HALLOWEEN_POINTS_EMOJI } = require('../utils/halloweenPoints');
-const { infectMember, isInfected, INFECTION_DURATION_MS } = require('../utils/halloweenInfection');
+
+const DAILY_LIMIT = 10;
+const ICON_DIR = path.join(__dirname, '../Assets/halloween/icons');
+const HOUSES = [
+  { name: "Witch's House", emoji: '🏚️' },
+  { name: 'Pumpkin House', emoji: '🎃' },
+  { name: 'Haunted Mansion', emoji: '👻' },
+  { name: 'Abandoned House', emoji: '🏚️' },
+];
+const FINDS = ['Lollipop', 'Mystery Potion', 'Pumpkin', 'Candy Corn', 'Chocolate Bar'];
 
 function randomInt(min, max) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
+async function reserveDailyUse(guildId, userId, day) {
+  const filter = { guildId, userId, day, uses: { $lt: DAILY_LIMIT } };
+  await HalloweenTrickOrTreat.updateOne(
+    { guildId, userId, day, uses: { $exists: false } },
+    { $set: { uses: 1 } }
+  );
+
+  try {
+    return await HalloweenTrickOrTreat.findOneAndUpdate(
+      filter,
+      { $inc: { uses: 1 } },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    );
+  } catch (error) {
+    if (error.code !== 11000) throw error;
+    return HalloweenTrickOrTreat.findOneAndUpdate(filter, { $inc: { uses: 1 } }, { new: true });
+  }
+}
+
+async function addCandy(guildId, userId, amount) {
+  return User.findOneAndUpdate(
+    { guildId, userId },
+    { $inc: { candy: amount } },
+    { upsert: true, new: true, setDefaultsOnInsert: true }
+  );
+}
+
+async function takeCandy(guildId, userId, amount) {
+  const current = await User.findOne({ guildId, userId }).select('candy').lean();
+  const lost = Math.min(amount, current?.candy ?? 0);
+  if (!lost) return 0;
+  const updated = await User.findOneAndUpdate(
+    { guildId, userId, candy: { $gte: lost } },
+    { $inc: { candy: -lost } },
+    { new: true }
+  );
+  return updated ? lost : 0;
+}
+
+function iconAttachment(name) {
+  const filePath = path.join(ICON_DIR, `${name}.png`);
+  if (!fs.existsSync(filePath)) return null;
+  const fileName = `trick-or-treat-${name}.png`;
+  return { attachment: new AttachmentBuilder(filePath, { name: fileName }), fileName };
+}
+
+function nextUtcDayTimestamp(day) {
+  const nextDay = new Date(`${day}T00:00:00.000Z`);
+  nextDay.setUTCDate(nextDay.getUTCDate() + 1);
+  return Math.floor(nextDay.getTime() / 1000);
+}
+
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('trick-or-treat')
-    .setDescription('Choose a Halloween trick or treat once per day.')
-    .setDMPermission(false)
-    .addStringOption((option) => option
-      .setName('choice')
-      .setDescription('Choose your fate.')
-      .setRequired(true)
-      .addChoices(
-        { name: 'Treat', value: 'treat' },
-        { name: 'Trick', value: 'trick' }
-      )),
+    .setDescription('Go trick-or-treating up to 10 times today.')
+    .setDMPermission(false),
 
   async execute(interaction) {
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply();
     const guildId = interaction.guild.id;
     const userId = interaction.user.id;
     const day = new Date().toISOString().slice(0, 10);
-    const choice = interaction.options.getString('choice');
 
     try {
-      const entry = await HalloweenTrickOrTreat.create({ guildId, userId, day, choice });
-      let response;
+      const daily = await reserveDailyUse(guildId, userId, day);
+      if (!daily) {
+        return interaction.editReply(`🎃 You used all **${DAILY_LIMIT}** visits today. Come back <t:${nextUtcDayTimestamp(day)}:R>!`);
+      }
 
-      if (choice === 'treat') {
-        const amount = randomInt(100, 300);
-        const account = await addHalloweenPoints(guildId, userId, amount);
-        entry.outcome = 'points';
-        entry.amount = amount;
-        await entry.save();
-        response = `🍬 Treat! You won **${amount}** ${HALLOWEEN_POINTS_EMOJI} Halloween Points. Your balance is **${account.halloweenPoints.toLocaleString()}**.`;
+      const house = HOUSES[Math.floor(Math.random() * HOUSES.length)];
+      const roll = Math.random();
+      let title;
+      let description;
+      let color;
+      let outcome;
+      let amount = 0;
+      let iconName;
+
+      if (roll < 0.5) {
+        title = '🍬 TRICK OR TREAT!';
+        amount = randomInt(20, 50);
+        await addCandy(guildId, userId, amount);
+        outcome = 'candy';
+        iconName = 'candy';
+        color = '#2ECC71';
+        description = `The owner gives you **${amount}** 🍬!`;
+      } else if (roll < 0.7) {
+        title = '✨ LUCKY!';
+        const item = FINDS[Math.floor(Math.random() * FINDS.length)];
+        await User.findOneAndUpdate(
+          { guildId, userId },
+          { $addToSet: { inventory: item } },
+          { upsert: true, new: true, setDefaultsOnInsert: true }
+        );
+        outcome = 'found-item';
+        iconName = 'rare';
+        color = '#9B59B6';
+        description = `You found a **${item}**!`;
+      } else if (roll < 0.85) {
+        title = '💀 CURSED!';
+        amount = await takeCandy(guildId, userId, randomInt(10, 30));
+        outcome = 'lost-candy';
+        iconName = 'skull';
+        color = '#E74C3C';
+        description = amount
+          ? `Something cursed followed you home — you lost **${amount}** 🍬!`
+          : 'Something cursed followed you home, but you had no candy to take!';
       } else {
-        const alreadyInfected = await isInfected(guildId, userId);
-        if (!alreadyInfected && Math.random() < 0.3) {
-          const result = await infectMember(interaction.guild, interaction.member, userId);
-          if (result.ok) {
-            entry.outcome = 'infected';
-            entry.amount = INFECTION_DURATION_MS;
-            await entry.save();
-            response = '🧟 Trick! You got infected for **one hour**. Use the Halloween Shop cure to recover early.';
-          }
-        }
-
-        if (!response) {
-          const requestedLoss = randomInt(50, 150);
-          const account = await User.findOne({ guildId, userId }).lean();
-          const loss = Math.min(requestedLoss, account?.halloweenPoints ?? 0);
-          if (loss > 0) {
-            const debit = await User.updateOne(
-              { guildId, userId, halloweenPoints: { $gte: loss } },
-              { $inc: { halloweenPoints: -loss } }
-            );
-            if (debit.modifiedCount > 0) {
-              entry.outcome = 'lost-points';
-              entry.amount = loss;
-              await entry.save();
-              response = `🕸️ Trick! You lost **${loss}** Halloween Points.`;
-            }
-          }
-
-          if (!response) {
-            entry.outcome = 'empty-pockets';
-            entry.amount = 0;
-            await entry.save();
-            response = '🕸️ Trick! Your pockets were empty, so the ghost had nothing to take.';
-          }
-        }
+        title = '👻 YOU GOT TRICKED!';
+        amount = await takeCandy(guildId, userId, randomInt(5, 15));
+        outcome = 'dropped-candy';
+        iconName = 'ghost';
+        color = '#F1C40F';
+        description = amount
+          ? `A ghost scared you and you dropped **${amount}** 🍬!`
+          : 'A ghost scared you, but your pockets were already empty!';
       }
 
-      const balance = await User.findOne({ guildId, userId }).lean();
-      return interaction.editReply(`${response}\nCurrent balance: **${(balance?.halloweenPoints ?? 0).toLocaleString()}** ${HALLOWEEN_POINTS_EMOJI}.`);
+      daily.lastOutcome = outcome;
+      daily.lastAmount = amount;
+      await daily.save();
+
+      const account = await User.findOne({ guildId, userId }).select('candy').lean();
+      const left = DAILY_LIMIT - daily.uses;
+      const houseIcon = iconAttachment('house');
+      const embed = new EmbedBuilder()
+        .setColor(color)
+        .setTitle(title)
+        .setAuthor({
+          name: `You visited the ${house.name}...`,
+          iconURL: houseIcon ? `attachment://${houseIcon.fileName}` : undefined,
+        })
+        .setDescription(
+          `${description}\n\n` +
+          `🍭 **${left}/${DAILY_LIMIT}** Trick-or-Treats left today — run \/trick-or-treat again!`
+        )
+        .setFooter({ text: `Candy balance: ${(account?.candy ?? 0).toLocaleString()} 🍬` });
+      const icon = iconAttachment(iconName);
+      if (icon) embed.setThumbnail(`attachment://${icon.fileName}`);
+
+      return interaction.editReply({
+        embeds: [embed],
+        files: [houseIcon, icon].filter(Boolean).map((entry) => entry.attachment),
+      });
     } catch (error) {
-      if (error.code === 11000) {
-        return interaction.editReply('You already played Trick-or-Treat today. Come back after the UTC day resets!');
-      }
       console.error('[trick-or-treat] error:', error);
       return interaction.editReply('❌ I could not finish your Trick-or-Treat. Please try again later.');
     }

@@ -5,7 +5,7 @@ const {
 } = require('discord.js');
 const HalloweenBoss = require('../models/HalloweenBoss');
 const HalloweenBossSchedule = require('../models/HalloweenBossSchedule');
-const { BOSS_SKINS, spawnBoss } = require('../utils/halloweenBoss');
+const { BOSS_SKINS, spawnBoss, finishBoss } = require('../utils/halloweenBoss');
 
 const DEFAULT_BOSS_CHANNEL_ID = '1549050285798981682';
 const BOSS_CHANNEL_TYPES = [ChannelType.GuildText, ChannelType.GuildAnnouncement];
@@ -65,6 +65,9 @@ module.exports = {
     .addSubcommand((sub) => sub
       .setName('unschedule')
       .setDescription('Turn off the daily Boss schedule.'))
+    .addSubcommand((sub) => sub
+      .setName('end')
+      .setDescription('End the active Boss fight and post final rankings.'))
     .addSubcommand((sub) => sub
       .setName('status')
       .setDescription('Show the active Boss and daily schedule.')),
@@ -128,6 +131,13 @@ module.exports = {
         { upsert: true, setDefaultsOnInsert: true }
       );
       return interaction.editReply('✅ The daily Boss schedule is off.');
+    }
+
+    if (subcommand === 'end') {
+      const active = await HalloweenBoss.findOne({ guildId, active: true });
+      if (!active) return interaction.editReply('There is no active Boss fight to end.');
+      await finishBoss(interaction.client, active, { endedByStaff: true });
+      return interaction.editReply(`✅ **${active.name}** has been ended. Final rankings were posted.`);
     }
 
     const [active, schedule] = await Promise.all([

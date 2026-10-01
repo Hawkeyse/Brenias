@@ -91,10 +91,10 @@ function logBossAttack(client, { userId, bossName, damage, isCrit, hpRemaining, 
   });
 }
 
-function logBossDefeated(client, { bossName, topAttackers }) {
+function logBossDefeated(client, { bossName, topAttackers, endedByStaff = false }) {
   const lines = topAttackers.map((p, i) => `${i + 1}. <@${p.userId}> — ${p.damage.toLocaleString()} dmg`);
   return log(client, 'BOSS', {
-    description: `**${bossName}** was defeated!`,
+    description: endedByStaff ? `**${bossName}** fight was ended early by staff.` : `**${bossName}** was defeated!`,
     fields: lines.length ? [{ name: 'Top Attackers', value: lines.join('\n') }] : [],
   });
 }

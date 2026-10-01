@@ -4,7 +4,7 @@
 const fs = require('fs');
 const path = require('path');
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, AttachmentBuilder } = require('discord.js');
-const { addHalloweenPoints, HALLOWEEN_POINTS_EMOJI } = require('./halloweenPoints');
+const { addHalloweenPoints } = require('./halloweenPoints');
 const { logBossDefeated, logBossSpawned } = require('./halloweenLog');
 const HalloweenBoss = require('../models/HalloweenBoss');
 
@@ -94,15 +94,17 @@ function buildBossEmbed(boss) {
   });
 
   const embed = new EmbedBuilder()
-    .setColor(alive ? '#FF7518' : '#95A5A6')
-    .setTitle(alive ? `👹 ${boss.name}` : `💀 ${boss.name} — Defeated!`)
+    .setColor(alive ? '#FF7518' : boss.endedByStaff ? '#F1C40F' : '#95A5A6')
+    .setTitle(alive ? `👹 ${boss.name}` : boss.endedByStaff ? `⏹️ ${boss.name} — Fight Ended` : `💀 ${boss.name} — Defeated!`)
     .setImage(`attachment://${imageFilename}`)
     .setDescription(
       `${renderHpBar(boss.currentHP, boss.maxHP)}\n` +
       `**HP:** ${Math.max(0, boss.currentHP).toLocaleString()} / ${boss.maxHP.toLocaleString()}\n\n` +
       (alive
         ? 'Hit **Attack** below to deal damage! One attack every 30 minutes.'
-        : 'The fight is over — check the leaderboard channel for rewards!')
+        : boss.endedByStaff
+          ? 'This fight was ended by staff — check the leaderboard for final rankings.'
+          : 'The fight is over — check the leaderboard channel for rewards!')
     );
 
   if (topLines.length > 0) {
@@ -184,9 +186,10 @@ async function spawnBoss({ client, guildId, channel, name, skinKey, hp }) {
  * (HP <= 0) or was force-ended by staff early — rank rewards are based on
  * whatever damage was actually dealt.
  */
-async function finishBoss(client, boss) {
+async function finishBoss(client, boss, { endedByStaff = false } = {}) {
   boss.currentHP = Math.max(0, boss.currentHP);
   boss.active = false;
+  boss.endedByStaff = endedByStaff;
   boss.endedAt = new Date();
 
   const sorted = [...boss.participants].sort((a, b) => b.damage - a.damage);
@@ -224,12 +227,12 @@ async function finishBoss(client, boss) {
         const rank = i + 1;
         const bonus = RANK_REWARDS[rank] ?? (rank <= 10 ? TOP10_REWARD : 0);
         const medal = ['🥇', '🥈', '🥉'][i] || `**${rank}.**`;
-        return `${medal} <@${p.userId}> — **${p.damage.toLocaleString()}** dmg (+${bonus.toLocaleString()} ${HALLOWEEN_POINTS_EMOJI})`;
+        return `${medal} <@${p.userId}> — **${p.damage.toLocaleString()}** dmg (+${bonus.toLocaleString()} 🎃)`;
       });
 
       const resultsEmbed = new EmbedBuilder()
-        .setColor('#FF7518')
-        .setTitle(`💀 ${boss.name} has been defeated!`)
+        .setColor(endedByStaff ? '#F1C40F' : '#FF7518')
+        .setTitle(endedByStaff ? `⏹️ ${boss.name} fight ended by staff` : `💀 ${boss.name} has been defeated!`)
         .setDescription(
           `**${sorted.length}** member(s) joined the fight and dealt **${totalDamage.toLocaleString()}** total damage.\n\n` +
           (lines.length > 0 ? lines.join('\n') : 'Nobody attacked this boss.')
@@ -242,7 +245,7 @@ async function finishBoss(client, boss) {
     console.error('[halloweenBoss] Failed to post results to leaderboard channel:', err.message);
   }
 
-  await logBossDefeated(client, { bossName: boss.name, topAttackers: sorted.slice(0, 10) });
+  await logBossDefeated(client, { bossName: boss.name, topAttackers: sorted.slice(0, 10), endedByStaff });
 }
 
 module.exports = {
