@@ -5,7 +5,7 @@ const { Events, EmbedBuilder } = require('discord.js');
 const HalloweenPuzzle = require('../models/HalloweenPuzzle');
 const { addHalloweenPoints } = require('../utils/halloweenPoints');
 const { logPuzzleSolved } = require('../utils/halloweenLog');
-const { isInfected } = require('../utils/halloweenInfection');
+const { scheduleNextPuzzle } = require('../utils/halloweenPuzzle');
 
 const PUMPKIN_EMOJI = '<:687657pumpkin:1549044780863070258>';
 
@@ -14,7 +14,6 @@ module.exports = (client) => {
     try {
       if (message.author.bot || !message.guild) return;
       if (!message.content || message.content.trim().length === 0) return;
-      if (await isInfected(message.guild.id, message.author.id)) return;
 
       const puzzle = await HalloweenPuzzle.findOne({
         guildId: message.guild.id,
@@ -38,6 +37,7 @@ module.exports = (client) => {
 
       await addHalloweenPoints(message.guild.id, message.author.id, claimed.reward);
       await logPuzzleSolved(client, { number: claimed.number, userId: message.author.id, reward: claimed.reward });
+      await scheduleNextPuzzle(message.guild.id);
 
       const embed = new EmbedBuilder()
         .setColor('#FF7518')

@@ -1,35 +1,29 @@
 // commands/halloweenpuzzle.js
 const { SlashCommandBuilder, EmbedBuilder, PermissionsBitField, ChannelType } = require('discord.js');
 const HalloweenPuzzle = require('../models/HalloweenPuzzle');
+const HalloweenPuzzleSchedule = require('../models/HalloweenPuzzleSchedule');
 const User = require('../models/User');
-const { HALLOWEEN_POINTS_EMOJI } = require('../utils/halloweenPoints');
-const { isInfected } = require('../utils/halloweenInfection');
+const { postNextPuzzle, scheduleNextPuzzle } = require('../utils/halloweenPuzzle');
+const { logPuzzleRevealed } = require('../utils/halloweenLog');
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('halloween-puzzle')
-    .setDescription('Manage the Daily Halloween Puzzle 🧩')
+    .setDescription('Manage the AI-generated Halloween Puzzle 🧩')
     .addSubcommand(sub => sub
-      .setName('post')
-      .setDescription('Post today\'s puzzle (staff only)')
-      .addStringOption(opt => opt
-        .setName('riddle')
-        .setDescription('The riddle text (include the question, e.g. "...What am I? 👻")')
-        .setRequired(true))
-      .addStringOption(opt => opt
-        .setName('answer')
-        .setDescription('Correct answer (case-insensitive, exact match)')
-        .setRequired(true))
-      .addIntegerOption(opt => opt
-        .setName('reward')
-        .setDescription('Halloween Points reward for solving first (default 500)')
-        .setMinValue(1)
-        .setRequired(false))
+      .setName('setup')
+      .setDescription('Start automatic AI puzzles in a channel (staff only).')
       .addChannelOption(opt => opt
         .setName('channel')
-        .setDescription('Channel to post in (defaults to this channel)')
+        .setDescription('Channel for the AI-generated puzzles.')
         .addChannelTypes(ChannelType.GuildText)
-        .setRequired(false)))
+        .setRequired(true)))
+    .addSubcommand(sub => sub
+      .setName('status')
+      .setDescription('Show the automatic puzzle schedule.'))
+    .addSubcommand(sub => sub
+      .setName('stop')
+      .setDescription('Stop automatic puzzle posts (staff only).'))
     .addSubcommand(sub => sub
       .setName('reveal')
       .setDescription('Reveal today\'s answer if nobody solved it (staff only)'))
@@ -42,54 +36,41 @@ module.exports = {
     const guildId = interaction.guild.id;
     const staffGate = () => interaction.member.permissions.has(PermissionsBitField.Flags.ManageGuild);
 
-    if (!staffGate() && await isInfected(guildId, interaction.user.id)) {
-      return interaction.reply({
-        content: '🧟 You are infected and cannot participate in Halloween games. Visit the Halloween Shop to buy a cure.',
-        ephemeral: true,
-      });
+    if (sub === 'setup') {
+      if (!staffGate()) {
+        return interaction.reply({ content: 'You need Manage Server permission to set up automatic puzzles.', ephemeral: true });
+      }
+      await interaction.deferReply({ ephemeral: true });
+      const channel = interaction.options.getChannel('channel');
+      const active = await HalloweenPuzzle.findOne({ guildId, channelId: channel.id, solved: false });
+      if (active) return interaction.editReply(`There is already an unsolved puzzle in ${channel}.`);
+      await HalloweenPuzzleSchedule.findOneAndUpdate(
+        { guildId },
+        { $set: { channelId: channel.id, enabled: true, nextPostAt: null } },
+        { upsert: true, new: true, setDefaultsOnInsert: true }
+      );
+      const result = await postNextPuzzle(interaction.client, guildId, { force: true });
+      return interaction.editReply(result.posted
+        ? `✅ AI puzzle posted in ${channel}. The next one follows 10 minutes after a correct answer.`
+        : 'Puzzle automation is already active.');
     }
 
-    if (sub === 'post') {
-      if (!staffGate()) {
-        return interaction.reply({ content: 'You need Manage Server permission to post a puzzle.', ephemeral: true });
-      }
+    if (sub === 'status') {
+      const [schedule, active] = await Promise.all([
+        HalloweenPuzzleSchedule.findOne({ guildId }),
+        HalloweenPuzzle.findOne({ guildId, solved: false }).sort({ number: -1 }),
+      ]);
+      if (!schedule?.enabled) return interaction.reply('Automatic Halloween puzzles are not set up.');
+      const timing = schedule.nextPostAt
+        ? `Next puzzle: <t:${Math.floor(schedule.nextPostAt.getTime() / 1000)}:R>.`
+        : active ? 'Waiting for someone to solve the current puzzle.' : 'No puzzle is queued right now.';
+      return interaction.reply(`AI puzzles are on in <#${schedule.channelId}>. ${timing}`);
+    }
 
-      const riddle = interaction.options.getString('riddle');
-      const answer = interaction.options.getString('answer').trim();
-      const reward = interaction.options.getInteger('reward') ?? 500;
-      const channel = interaction.options.getChannel('channel') || interaction.channel;
-
-      const existingUnsolved = await HalloweenPuzzle.findOne({ guildId, channelId: channel.id, solved: false });
-      if (existingUnsolved) {
-        return interaction.reply({
-          content: `⚠️ Puzzle #${existingUnsolved.number} in ${channel} hasn't been solved yet. Use \`/halloween-puzzle reveal\` first, or pick a different channel.`,
-          ephemeral: true
-        });
-      }
-
-      const count = await HalloweenPuzzle.countDocuments({ guildId });
-      const number = count + 1;
-
-      const embed = new EmbedBuilder()
-        .setColor('#FF7518')
-        .setTitle(`🧩 Halloween Puzzle #${number}`)
-        .setDescription(riddle)
-        .addFields({ name: '\u200b', value: 'Submit your answer below!' })
-        .setFooter({ text: `First correct answer wins ${reward} Halloween Points` });
-
-      const sent = await channel.send({ embeds: [embed] });
-
-      await HalloweenPuzzle.create({
-        guildId,
-        number,
-        question: riddle,
-        answer,
-        channelId: channel.id,
-        messageId: sent.id,
-        reward,
-      });
-
-      return interaction.reply({ content: `✅ Puzzle #${number} posted in ${channel}.`, ephemeral: true });
+    if (sub === 'stop') {
+      if (!staffGate()) return interaction.reply({ content: 'You need Manage Server permission to stop automatic puzzles.', ephemeral: true });
+      await HalloweenPuzzleSchedule.updateOne({ guildId }, { $set: { enabled: false, nextPostAt: null } });
+      return interaction.reply({ content: 'Automatic Halloween puzzles are stopped.', ephemeral: true });
     }
 
     if (sub === 'reveal') {
@@ -111,6 +92,8 @@ module.exports = {
         .setDescription(`⏰ Nobody solved **Puzzle #${puzzle.number}**!\nThe answer was: **${puzzle.answer}**`);
 
       if (channel) await channel.send({ embeds: [embed] }).catch(() => {});
+      await logPuzzleRevealed(interaction.client, { number: puzzle.number, answer: puzzle.answer });
+      await scheduleNextPuzzle(guildId);
       return interaction.reply({ content: `✅ Puzzle #${puzzle.number} revealed.`, ephemeral: true });
     }
 
@@ -120,7 +103,7 @@ module.exports = {
         .limit(10);
 
       if (topUsers.length === 0) {
-        return interaction.reply(`No Halloween Points earned yet — solve today\'s puzzle first! ${HALLOWEEN_POINTS_EMOJI}`);
+        return interaction.reply('No Halloween Points earned yet — solve today\'s puzzle first! 🧩');
       }
 
       const lines = topUsers.map((u, i) => {
