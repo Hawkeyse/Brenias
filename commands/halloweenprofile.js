@@ -41,7 +41,7 @@ const rankFor = (pts) => [...RANKS].reverse().find((r) => pts >= r.min) || RANKS
 // halloween-2 has a single wide bar, so rank + inventory share it (divider).
 const LAYOUTS = {
   'halloween-1.png': {
-    avatar: { cx: 2011, cy: 148, r: 74 },
+    avatar: { cx: 2011, cy: 148, r: 82 },
     header: { x: 1140, y: 105, w: 720, h: 130 },
     boxes: [
       { x: 1098, y: 275, w: 357, h: 85 }, { x: 1488, y: 275, w: 318, h: 85 }, { x: 1826, y: 275, w: 296, h: 85 },
@@ -51,7 +51,7 @@ const LAYOUTS = {
     inventory: { x: 1140, y: 578, w: 955, h: 82 },
   },
   'halloween-2.png': {
-    avatar: { cx: 1267, cy: 178, r: 84 },
+    avatar: { cx: 1267, cy: 178, r: 92 },
     header: { x: 160, y: 110, w: 940, h: 170 },
     boxes: [
       { x: 130, y: 312, w: 448, h: 108 }, { x: 600, y: 312, w: 408, h: 108 }, { x: 1026, y: 312, w: 386, h: 108 },
@@ -62,7 +62,7 @@ const LAYOUTS = {
     divider: true,
   },
   'halloween-3.png': {
-    avatar: { cx: 1980, cy: 135, r: 72 },
+    avatar: { cx: 1980, cy: 135, r: 80 },
     header: { x: 1100, y: 70, w: 700, h: 160 },
     boxes: [
       { x: 1060, y: 265, w: 312, h: 90 }, { x: 1390, y: 265, w: 325, h: 90 }, { x: 1735, y: 265, w: 373, h: 90 },
@@ -214,9 +214,9 @@ async function renderCard(tpl, d) {
   catch (_) { ctx.fillStyle = '#222'; ctx.fillRect(a.cx - a.r, a.cy - a.r, a.r * 2, a.r * 2); }
   ctx.restore();
 
-  // header: glowing name + subtitle
-  const H = L.header, nx = H.x + H.w * 0.10, ny = H.y + H.h * 0.36, nameW = H.w * 0.80;
-  let fs = H.h * 0.36;
+  // header: glowing name
+  const H = L.header, nx = H.x + H.w * 0.13, ny = H.y + H.h * 0.52, nameW = H.w * 0.84;
+  let fs = H.h * 0.40;
   setFont(ctx, 'RubikDirt', fs);
   const name = d.name.toUpperCase();
   while (ctx.measureText(name).width > nameW && fs > 20) { fs -= 2; setFont(ctx, 'RubikDirt', fs); }
@@ -227,8 +227,6 @@ async function renderCard(tpl, d) {
   ctx.fillStyle = grad; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
   ctx.fillText(name, nx, ny);
   ctx.restore();
-  fitLeft(ctx, 'HALLOWEEN PROFILE', nx, H.y + H.h * 0.69, nameW, { size: H.h * 0.145, color: TAN, sp: H.h * 0.026 });
-
   // six stat boxes
   const status = d.infected
     ? { iconName: 'skull', label: 'Status', value: 'Infected', valueColor: '#ff5a4d' }
