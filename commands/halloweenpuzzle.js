@@ -2,6 +2,7 @@
 const { SlashCommandBuilder, EmbedBuilder, PermissionsBitField, ChannelType } = require('discord.js');
 const HalloweenPuzzle = require('../models/HalloweenPuzzle');
 const User = require('../models/User');
+const { isInfected } = require('../utils/halloweenInfection');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -39,6 +40,13 @@ module.exports = {
     const sub = interaction.options.getSubcommand();
     const guildId = interaction.guild.id;
     const staffGate = () => interaction.member.permissions.has(PermissionsBitField.Flags.ManageGuild);
+
+    if (!staffGate() && await isInfected(guildId, interaction.user.id)) {
+      return interaction.reply({
+        content: '🧟 You are infected and cannot participate in Halloween games. Visit the Halloween Shop to buy a cure.',
+        ephemeral: true,
+      });
+    }
 
     if (sub === 'post') {
       if (!staffGate()) {

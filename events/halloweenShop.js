@@ -16,7 +16,9 @@ const {
   buildShopView,
   buildRolesView,
   buildConfirmView,
+  buildCureConfirmView,
   purchaseRole,
+  purchaseCure,
   setWornRoles,
   claimFreeRole,
   sweepExpired,
@@ -70,6 +72,11 @@ module.exports = (client) => {
         return await interaction.editReply(await buildShopView(guild.id, userId));
       }
 
+      if (id === 'halloween-shop-cure') {
+        await interaction.deferReply({ ephemeral: true });
+        return await interaction.editReply(await buildCureConfirmView(guild.id, userId));
+      }
+
       if (id.startsWith('halloween-shop-item:')) {
         await interaction.deferReply({ ephemeral: true });
         const item = shopItems().find((i) => i.key === id.split(':')[1]);
@@ -99,6 +106,13 @@ module.exports = (client) => {
         await interaction.deferUpdate();
         const member = await guild.members.fetch(userId);
         const result = await purchaseRole(guild, member, id.split(':')[1]);
+        return await interaction.editReply(await resultPayload(interaction, result));
+      }
+
+      if (id === 'halloween-shop-cure-confirm') {
+        await interaction.deferUpdate();
+        const member = await guild.members.fetch(userId);
+        const result = await purchaseCure(guild, member);
         return await interaction.editReply(await resultPayload(interaction, result));
       }
 

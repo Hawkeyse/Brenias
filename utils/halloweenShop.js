@@ -20,6 +20,7 @@ const cfg = require('./halloweenShopConfig');
 const { addHalloweenPoints } = require('./halloweenPoints');
 const { log } = require('./halloweenLog');
 const { COLORS } = require('./halloweenReply');
+const { getActiveInfection, cureMember } = require('./halloweenInfection');
 
 // ─── small helpers ───────────────────────────────────────────────────────
 const fmt = (n) => Number(n).toLocaleString('en-US');
@@ -135,7 +136,12 @@ function buildPanel() {
       .setCustomId('halloween-shop-me')
       .setLabel('My Shop')
       .setEmoji('💰')
-      .setStyle(ButtonStyle.Primary)
+      .setStyle(ButtonStyle.Primary),
+    new ButtonBuilder()
+      .setCustomId('halloween-shop-cure')
+      .setLabel('Cure Infection')
+      .setEmoji(toEmoji(cfg.CURE_ITEM.emoji))
+      .setStyle(ButtonStyle.Danger)
   );
 
   return {
@@ -151,9 +157,10 @@ function buildPanel() {
 // roles you're wearing — that's how you change your name color.
 async function buildShopView(guildId, userId) {
   const now = new Date();
-  const [user, owned] = await Promise.all([
+  const [user, owned, infection] = await Promise.all([
     User.findOne({ guildId, userId }).lean(),
     ShopRole.find({ guildId, userId, expiresAt: { $gt: now } }).lean(),
+    getActiveInfection(guildId, userId),
   ]);
 
   const points = user?.halloweenPoints ?? 0;
@@ -169,21 +176,32 @@ async function buildShopView(guildId, userId) {
     .setTitle('💰 My Shop')
     .setDescription(
       `**${fmt(points)}** 🎃 Halloween Points\n` +
+      (infection
+        ? `🧟 **You are infected!** Your infection expires <t:${unix(infection.expiresAt)}:R>.\n` +
+          `Buy the ${cfg.CURE_ITEM.emoji} **Cure Infection** item below to remove it.\n`
+        : '') +
       `Shop roles owned: **${paid.length}**\n\n` +
       paidLines +
       (freeOwned ? `\n\n🎁 Free role: <@&${freeOwned.roleId}>` : '') +
       (owned.length ? '\n\n🎨 Want a different name color? Tap **Roles** below.' : '')
     );
 
-  const components = owned.length
-    ? [new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId('halloween-shop-roles')
-          .setLabel('Roles')
-          .setEmoji('🎨')
-          .setStyle(ButtonStyle.Secondary)
-      )]
-    : [];
+  const buttons = [];
+  if (owned.length) {
+    buttons.push(new ButtonBuilder()
+      .setCustomId('halloween-shop-roles')
+      .setLabel('Roles')
+      .setEmoji('🎨')
+      .setStyle(ButtonStyle.Secondary));
+  }
+  if (infection) {
+    buttons.push(new ButtonBuilder()
+      .setCustomId('halloween-shop-cure')
+      .setLabel('Cure Infection')
+      .setEmoji(toEmoji(cfg.CURE_ITEM.emoji))
+      .setStyle(ButtonStyle.Danger));
+  }
+  const components = buttons.length ? [new ActionRowBuilder().addComponents(buttons)] : [];
 
   return { embeds: [embed], components };
 }
@@ -312,6 +330,43 @@ async function buildConfirmView(guildId, userId, item) {
   return { embeds: [embed], components: [row] };
 }
 
+async function buildCureConfirmView(guildId, userId) {
+  const [user, infection] = await Promise.all([
+    User.findOne({ guildId, userId }).lean(),
+    getActiveInfection(guildId, userId),
+  ]);
+  const points = user?.halloweenPoints ?? 0;
+  const price = cfg.CURE_PRICE;
+  const canBuy = !!infection && points >= price;
+
+  let status;
+  if (!infection) status = '✅ You are not infected.';
+  else if (points < price) status = `❌ You have **${fmt(points)}** 🎃 — you need **${fmt(price - points)}** more.`;
+  else status = `**Your points:** ${fmt(points)} → **${fmt(points - price)}** after buying`;
+
+  return {
+    embeds: [new EmbedBuilder()
+      .setColor(canBuy ? '#FF7518' : COLORS.error)
+      .setTitle(`${cfg.CURE_ITEM.emoji} Buy Cure Infection?`)
+      .setDescription(
+        `Remove your infected role and restore access to the games.\n\n` +
+        `**Cost:** ${fmt(price)} 🎃\n\n${status}`
+      )],
+    components: [new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId('halloween-shop-cure-confirm')
+        .setLabel('Use Cure')
+        .setEmoji(toEmoji(cfg.CURE_ITEM.emoji))
+        .setStyle(ButtonStyle.Success)
+        .setDisabled(!canBuy),
+      new ButtonBuilder()
+        .setCustomId('halloween-shop-cancel')
+        .setLabel('Cancel')
+        .setStyle(ButtonStyle.Secondary)
+    )],
+  };
+}
+
 // ─── buying a role ───────────────────────────────────────────────────────
 // A role can only be bought once while you still own it (no extending, no
 // stacking). You can own as many DIFFERENT roles as you like.
@@ -408,6 +463,32 @@ async function purchaseRole(guild, member, itemKey) {
   );
 }
 
+async function purchaseCure(guild, member) {
+  const infection = await getActiveInfection(guild.id, member.id);
+  if (!infection) return fail('You are not currently infected.');
+
+  const charged = await User.findOneAndUpdate(
+    { guildId: guild.id, userId: member.id, halloweenPoints: { $gte: cfg.CURE_PRICE } },
+    { $inc: { halloweenPoints: -cfg.CURE_PRICE } },
+    { new: true }
+  );
+  if (!charged) {
+    const user = await User.findOne({ guildId: guild.id, userId: member.id }).lean();
+    return fail(`Not enough points — the cure costs **${fmt(cfg.CURE_PRICE)}** 🎃 and you have **${fmt(user?.halloweenPoints ?? 0)}**.`);
+  }
+
+  const cured = await cureMember(guild, member);
+  if (!cured.ok) {
+    await addHalloweenPoints(guild.id, member.id, cfg.CURE_PRICE);
+    return fail(`${cured.reason} Your points were refunded.`);
+  }
+
+  return success(
+    `${cfg.CURE_ITEM.emoji} **You have been cured!** The infected role has been removed.\n` +
+    `💰 Balance: **${fmt(charged.halloweenPoints)}** 🎃`
+  );
+}
+
 // ─── free lantern (pick one, swap any time) ──────────────────────────────
 async function claimFreeRole(guild, member, itemKey) {
   const item = cfg.FREE_ITEMS.find((i) => i.key === itemKey);
@@ -491,7 +572,9 @@ module.exports = {
   buildShopView,
   buildRolesView,
   buildConfirmView,
+  buildCureConfirmView,
   purchaseRole,
+  purchaseCure,
   setWornRoles,
   claimFreeRole,
   sweepExpired,

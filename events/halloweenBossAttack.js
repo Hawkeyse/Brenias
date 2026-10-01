@@ -14,6 +14,7 @@ const {
 const { addHalloweenPoints } = require('../utils/halloweenPoints');
 const { logBossAttack } = require('../utils/halloweenLog');
 const { simpleEmbed, COLORS } = require('../utils/halloweenReply');
+const { isInfected } = require('../utils/halloweenInfection');
 
 // Serializes attacks per guild so two users cannot load and save stale boss
 // documents at the same time, which would make HP appear to move backward.
@@ -26,6 +27,13 @@ module.exports = (client) => {
     const guildId = interaction.guild.id;
     const userId = interaction.user.id;
     const lockKey = guildId;
+
+    if (await isInfected(guildId, userId)) {
+      return interaction.reply({
+        embeds: [simpleEmbed('🧟 You are infected and cannot attack the Boss. Visit the Halloween Shop to buy a cure.', COLORS.warning)],
+        ephemeral: true,
+      }).catch(() => {});
+    }
 
     if (processing.has(lockKey)) {
       return interaction.reply({ embeds: [simpleEmbed('⏳ Another attack is still processing, hang on!', COLORS.warning)], ephemeral: true }).catch(() => {});

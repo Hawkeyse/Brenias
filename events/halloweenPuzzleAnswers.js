@@ -5,6 +5,7 @@ const { Events, EmbedBuilder } = require('discord.js');
 const HalloweenPuzzle = require('../models/HalloweenPuzzle');
 const { addHalloweenPoints } = require('../utils/halloweenPoints');
 const { logPuzzleSolved } = require('../utils/halloweenLog');
+const { isInfected } = require('../utils/halloweenInfection');
 
 const PUMPKIN_EMOJI = '<:687657pumpkin:1549044780863070258>';
 
@@ -13,6 +14,7 @@ module.exports = (client) => {
     try {
       if (message.author.bot || !message.guild) return;
       if (!message.content || message.content.trim().length === 0) return;
+      if (await isInfected(message.guild.id, message.author.id)) return;
 
       const puzzle = await HalloweenPuzzle.findOne({
         guildId: message.guild.id,

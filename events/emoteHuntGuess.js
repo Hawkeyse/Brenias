@@ -9,6 +9,7 @@ const EmoteHunt = require('../models/EmoteHunt');
 const { addHalloweenPoints } = require('../utils/halloweenPoints');
 const { logEmoteHuntFound } = require('../utils/halloweenLog');
 const { formatEmote } = require('../utils/halloweenEmotes');
+const { isInfected } = require('../utils/halloweenInfection');
 
 module.exports = (client) => {
   client.on(Events.MessageReactionAdd, async (reaction, user) => {
@@ -25,6 +26,7 @@ module.exports = (client) => {
 
       const guildId = reaction.message.guild?.id;
       if (!guildId) return;
+      if (await isInfected(guildId, user.id)) return;
 
       const hunt = await EmoteHunt.findOne({
         guildId,

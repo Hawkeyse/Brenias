@@ -5,6 +5,7 @@
 
 const DEFAULT_PRICE = 1000;        // Halloween Points, used when an item has no `price`
 const DEFAULT_DURATION_DAYS = 7;   // how long one purchase lasts. Each role can only be bought once while you still own it.
+const CURE_PRICE = 500;             // Halloween Points for the one-use infection cure
 
 // Everything expires at this moment no matter when it was bought.
 // 2026-11-01 00:00 UTC = the end of Halloween night in Ghana (UTC+0).
@@ -42,16 +43,23 @@ const FREE_ITEMS = [
   { key: 'gothic_lantern', name: 'Gothic Lantern', emoji: '<:547722gothiclantern:1554600427926855710>', roleId: '1553877831845679195' },
 ];
 
-// Reserved for the Zombie Infection game — not used by the shop yet.
 const INFECTION_ROLE_ID = '1554595332321583114';
+const CURE_ITEM = {
+  key: 'cure_infection',
+  name: 'Cure Infection',
+  emoji: '<:1214bloodpotion:1549398601438859314>',
+  price: CURE_PRICE,
+};
 
 module.exports = {
   DEFAULT_PRICE,
   DEFAULT_DURATION_DAYS,
+  CURE_PRICE,
   EVENT_END,
   SWEEP_INTERVAL_MS,
   BANNER_FILE,
   SHOP_ITEMS,
   FREE_ITEMS,
   INFECTION_ROLE_ID,
+  CURE_ITEM,
 };
