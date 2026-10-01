@@ -15,9 +15,8 @@ const { addHalloweenPoints } = require('../utils/halloweenPoints');
 const { logBossAttack } = require('../utils/halloweenLog');
 const { simpleEmbed, COLORS } = require('../utils/halloweenReply');
 
-// Guards against a user's double-click being processed twice before the
-// first click's DB round-trip finishes. Not a substitute for the real
-// 30-minute cooldown below — just prevents a race on rapid double-taps.
+// Serializes attacks per guild so two users cannot load and save stale boss
+// documents at the same time, which would make HP appear to move backward.
 const processing = new Set();
 
 module.exports = (client) => {
@@ -26,10 +25,10 @@ module.exports = (client) => {
 
     const guildId = interaction.guild.id;
     const userId = interaction.user.id;
-    const lockKey = `${guildId}-${userId}`;
+    const lockKey = guildId;
 
     if (processing.has(lockKey)) {
-      return interaction.reply({ embeds: [simpleEmbed('⏳ Still processing your last attack, hang on!', COLORS.warning)], ephemeral: true }).catch(() => {});
+      return interaction.reply({ embeds: [simpleEmbed('⏳ Another attack is still processing, hang on!', COLORS.warning)], ephemeral: true }).catch(() => {});
     }
     processing.add(lockKey);
 
