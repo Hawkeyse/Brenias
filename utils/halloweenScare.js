@@ -27,19 +27,20 @@ const ALLOWED_CHANNEL_IDS = [];
 // Never scare in these (rules, announcements, staff, shop, etc).
 const IGNORED_CHANNEL_IDS = [];
 
-// What to search on GIPHY — one is picked at random each scare.
-// Add / remove anything you like (characters, "jumpscare", etc).
+// Cinematic horror searches — one is picked at random for each scare.
 const GIPHY_SEARCH_TERMS = [
-  'pennywise',
-  'pennywise it clown',
-  'jump scare',
-  'jumpscare scary face',
-  'scary clown',
-  'creepy ghost',
-  'horror movie scary',
-  'the nun valak',
-  'freddy krueger',
-  'chucky doll',
+  'horror movie jumpscare',
+  'scary movie sudden face',
+  'the conjuring jumpscare',
+  'insidious red face demon',
+  'the nun valak jumpscare',
+  'it pennywise scary scene',
+  'scream ghostface jumpscare',
+  'freddy krueger nightmare scene',
+  'the grudge kayako jumpscare',
+  'ring samara tv scene',
+  'alien horror movie reveal',
+  'creepy found footage horror',
 ];
 // GIPHY content rating: 'g' | 'pg' | 'pg-13' | 'r'.  pg-13 keeps it spooky, not gory.
 const GIPHY_RATING = 'pg-13';
