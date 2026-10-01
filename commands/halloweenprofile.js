@@ -52,7 +52,7 @@ module.exports = {
         { name: 'Halloween Points', value: `${HALLOWEEN_POINTS_EMOJI} **${points.toLocaleString()}**`, inline: true },
         { name: 'Leaderboard Rank', value: `**#${rank + 1}**`, inline: true },
         { name: 'Status', value: infectionText, inline: true },
-        { name: 'Seasonal Roles', value: roleText },
+        { name: 'Inventory', value: roleText },
       )
       .setFooter({ text: 'October Season • Points, roles, and infection status' });
 
@@ -63,7 +63,7 @@ module.exports = {
       .setRequiredXP(SEASON_GOAL)
       .setLevel(1)
       .setRank(rank + 1)
-      .setStatus(null)
+      .setStatus(infection ? 'Infected' : 'Healthy')
       .setBackground(SEASON_BACKGROUNDS[Math.floor(Math.random() * SEASON_BACKGROUNDS.length)])
       .setOverlay(65);
 
