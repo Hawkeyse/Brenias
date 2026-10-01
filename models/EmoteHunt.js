@@ -3,6 +3,8 @@ const mongoose = require('mongoose');
 
 const emoteHuntSchema = new mongoose.Schema({
   guildId: { type: String, required: true },
+  announcementChannelId: { type: String, default: null },
+  announcementMessageId: { type: String, default: null },
   channelId: { type: String, required: true },
   messageId: { type: String, default: null },
   targetEmojiId: { type: String, required: true },

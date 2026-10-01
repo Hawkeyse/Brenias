@@ -26,7 +26,7 @@ module.exports = (client) => {
 
       const guildId = reaction.message.guild?.id;
       const channel = reaction.message.channel;
-      if (!guildId || channel.id !== EMOTE_HUNT_CHANNEL_ID) return;
+      if (!guildId) return;
 
       const hunt = await EmoteHunt.findOne({
         guildId,
@@ -72,7 +72,12 @@ module.exports = (client) => {
           `🔗 [Jump to the hunt](${reaction.message.url})`
         );
 
-      await channel.send({
+      const announcementChannel = await client.channels.fetch(
+        claimed.announcementChannelId || EMOTE_HUNT_CHANNEL_ID
+      ).catch(() => null);
+      if (!announcementChannel) return;
+
+      await announcementChannel.send({
         embeds: [revealEmbed],
         allowedMentions: { users: [user.id] },
       }).catch(() => {});
