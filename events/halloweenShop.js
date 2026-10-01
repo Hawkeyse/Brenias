@@ -77,6 +77,17 @@ module.exports = (client) => {
         return await interaction.editReply(await buildCureConfirmView(guild.id, userId));
       }
 
+      if (id === 'halloween-shop-infect') {
+        await interaction.deferReply({ ephemeral: true });
+        return await interaction.editReply({
+          embeds: [simpleEmbed(
+            `🧟 Infect another member for **${cfg.INFECTION_PRICE.toLocaleString()}** Halloween Points.\n\n` +
+            'Use `/infect user:@member` to choose who gets infected. The infection lasts one hour.',
+            COLORS.info
+          )],
+        });
+      }
+
       if (id.startsWith('halloween-shop-item:')) {
         await interaction.deferReply({ ephemeral: true });
         const item = shopItems().find((i) => i.key === id.split(':')[1]);

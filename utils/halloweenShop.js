@@ -166,7 +166,12 @@ function buildPanel() {
       .setCustomId('halloween-shop-cure')
       .setLabel('Cure Infection')
       .setEmoji(toEmoji(cfg.CURE_ITEM.emoji))
-      .setStyle(ButtonStyle.Danger)
+      .setStyle(ButtonStyle.Danger),
+    new ButtonBuilder()
+      .setCustomId('halloween-shop-infect')
+      .setLabel('Infect Someone')
+      .setEmoji('🧟')
+      .setStyle(ButtonStyle.Secondary)
   );
 
   return {

@@ -6,6 +6,7 @@
 const DEFAULT_PRICE = 1000;        // Halloween Points, used when an item has no `price`
 const DEFAULT_DURATION_DAYS = 7;   // how long one purchase lasts. Each role can only be bought once while you still own it.
 const CURE_PRICE = 500;             // Halloween Points for the one-use infection cure
+const INFECTION_PRICE = 600;         // Halloween Points to infect another member
 
 // Everything expires at this moment no matter when it was bought.
 // 2026-11-01 00:00 UTC = the end of Halloween night in Ghana (UTC+0).
@@ -55,6 +56,7 @@ module.exports = {
   DEFAULT_PRICE,
   DEFAULT_DURATION_DAYS,
   CURE_PRICE,
+  INFECTION_PRICE,
   EVENT_END,
   SWEEP_INTERVAL_MS,
   BANNER_FILE,
