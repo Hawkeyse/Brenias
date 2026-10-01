@@ -8,7 +8,11 @@ const { HALLOWEEN_POINTS_EMOJI } = require('../utils/halloweenPoints');
 
 Font.loadDefault();
 const SEASON_GOAL = 10000;
-const SEASON_BACKGROUND = path.join(__dirname, '../banners/001.jpg');
+const SEASON_BACKGROUNDS = [
+  'halloween-1.png',
+  'halloween-2.png',
+  'halloween-3.png',
+].map((file) => path.join(__dirname, '../banners', file));
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -60,7 +64,7 @@ module.exports = {
       .setLevel(1)
       .setRank(rank + 1)
       .setStatus(null)
-      .setBackground(SEASON_BACKGROUND)
+      .setBackground(SEASON_BACKGROUNDS[Math.floor(Math.random() * SEASON_BACKGROUNDS.length)])
       .setOverlay(65);
 
     rankCard.setStyles({
