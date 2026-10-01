@@ -14,7 +14,12 @@ async function startEmoteHunt(client, { force = false } = {}) {
   }
 
   const guildId = channel.guild.id;
-  const activeHunt = await EmoteHunt.findOne({ guildId, active: true }).sort({ startedAt: -1 });
+  const activeHunt = await EmoteHunt.findOne({
+    guildId,
+    channelId: channel.id,
+    messageId: { $ne: null },
+    active: true,
+  }).sort({ startedAt: -1 });
   const latestHunt = await EmoteHunt.findOne({ guildId }).sort({ startedAt: -1 });
   const now = Date.now();
 
