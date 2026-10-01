@@ -49,6 +49,7 @@ const LAYOUTS = {
     ],
     rank: { x: 1360, y: 485, w: 515, h: 83 },
     inventory: { x: 1140, y: 578, w: 955, h: 82 },
+    credit: { y: 692, size: 14 },
   },
   'halloween-2.png': {
     avatar: { cx: 1267, cy: 178, r: 92 },
@@ -59,6 +60,7 @@ const LAYOUTS = {
     ],
     rank: { x: 485, y: 558, w: 315, h: 124 },
     inventory: { x: 800, y: 558, w: 340, h: 124 },
+    credit: { y: 719, size: 14 },
     divider: true,
   },
   'halloween-3.png': {
@@ -70,6 +72,7 @@ const LAYOUTS = {
     ],
     rank: { x: 1320, y: 480, w: 480, h: 88 },
     inventory: { x: 1105, y: 598, w: 990, h: 84 },
+    credit: { y: 703, size: 12 },
   },
 };
 
@@ -292,6 +295,17 @@ async function renderCard(tpl, d) {
     ctx.beginPath(); ctx.moveTo(L.inventory.x, L.inventory.y + L.inventory.h * 0.16); ctx.lineTo(L.inventory.x, L.inventory.y + L.inventory.h * 0.84); ctx.stroke();
   }
   await drawInventory(ctx, L.inventory, d.items, hk, L.divider ? 30 * hk : 62 * hk);
+
+  ctx.save();
+  setFont(ctx, 'Manrope', L.credit.size);
+  ctx.fillStyle = TAN;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.shadowColor = 'rgba(0,0,0,0.8)';
+  ctx.shadowBlur = 4;
+  ctx.shadowOffsetY = 2;
+  ctx.fillText('Built by Brenias • Developed by Timtech', bg.width / 2, L.credit.y);
+  ctx.restore();
 
   return canvas.toBuffer('image/png');
 }
