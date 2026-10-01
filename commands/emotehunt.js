@@ -5,7 +5,7 @@ const {
   ChannelType,
 } = require('discord.js');
 const EmoteHunt = require('../models/EmoteHunt');
-const { EMOTE_POOL } = require('../utils/halloweenEmotes');
+const { EMOTE_POOL, formatEmote } = require('../utils/halloweenEmotes');
 const { logEmoteHuntStarted } = require('../utils/halloweenLog');
 
 const PUBLIC_POST_CHANNEL_TYPES = [ChannelType.GuildText, ChannelType.GuildAnnouncement];
@@ -50,6 +50,7 @@ module.exports = {
     await interaction.deferReply({ ephemeral: true });
     const subcommand = interaction.options.getSubcommand();
     const activeHunt = await EmoteHunt.findOne({ guildId: interaction.guild.id, active: true }).sort({ startedAt: -1 });
+    const previousHunt = await EmoteHunt.findOne({ guildId: interaction.guild.id }).sort({ startedAt: -1 });
     if (subcommand === 'start' && activeHunt) {
       return interaction.editReply('A hunt is already active. Use `/emote-hunt reset` to start a fresh one.');
     }
@@ -61,7 +62,8 @@ module.exports = {
       );
     }
 
-    const choices = EMOTE_POOL.filter((emote) => emote.id !== activeHunt?.targetEmojiId);
+    const previousTargetId = activeHunt?.targetEmojiId ?? previousHunt?.targetEmojiId;
+    const choices = EMOTE_POOL.filter((emote) => emote.id !== previousTargetId);
     const target = choices[Math.floor(Math.random() * choices.length)];
     const hunt = await EmoteHunt.create({
       guildId: interaction.guild.id,
@@ -77,7 +79,8 @@ module.exports = {
       .setColor('#9B59B6')
       .setTitle('👻 Halloween Emote Hunt')
       .setDescription(
-        'The hunt is live! React to any message in a public text channel with the hidden Halloween emote. ' +
+        `Find this emote: ${formatEmote(target)}\n` +
+        `React with it to any message in a public text channel to earn **${hunt.reward.toLocaleString()} points**. ` +
         'Staff-only, hidden, and voice channels do not count. The first correct reaction wins!'
       )
       .setFooter({ text: `First correct reaction wins ${hunt.reward.toLocaleString()} Halloween Points` });
