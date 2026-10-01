@@ -6,7 +6,7 @@
 // Reaction partials enabled on the client — see the note in index.js.
 const { Events, EmbedBuilder } = require('discord.js');
 const EmoteHunt = require('../models/EmoteHunt');
-const { addHalloweenPoints } = require('../utils/halloweenPoints');
+const { addHalloweenPoints, HALLOWEEN_POINTS_EMOJI } = require('../utils/halloweenPoints');
 const { logEmoteHuntFound } = require('../utils/halloweenLog');
 const { formatEmote } = require('../utils/halloweenEmotes');
 const { isInfected } = require('../utils/halloweenInfection');
@@ -66,7 +66,7 @@ module.exports = (client) => {
         .setDescription(
           `We have a winner!\n\n` +
           `🏆 ${user} was the first person to find the hidden ${foundEmote} emote!\n` +
-          `🎁 Reward: \`+${claimed.reward.toLocaleString()} Halloween Points\` 🎃\n\n` +
+          `🎁 Reward: \`+${claimed.reward.toLocaleString()} Halloween Points\` ${HALLOWEEN_POINTS_EMOJI}\n\n` +
           `⚡ That was fast! Think you can beat them next round?\n` +
           `👻 Another hunt is coming soon...\n\n` +
           `🔗 [Jump to the hunt](${reaction.message.url})`

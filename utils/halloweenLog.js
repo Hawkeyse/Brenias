@@ -3,6 +3,7 @@
 // consistently-styled embed here (channel 1549069002687385683) so staff
 // have one place to see everything that happened, in order.
 const { EmbedBuilder } = require('discord.js');
+const { HALLOWEEN_POINTS_EMOJI } = require('./halloweenPoints');
 
 const LOG_CHANNEL_ID = '1549069002687385683';
 
@@ -68,7 +69,7 @@ function logEmoteHuntFound(client, { userId, emoteName, points, url }) {
     description: `<@${userId}> found the hidden emote!`,
     fields: [
       { name: 'Emote', value: `\`${emoteName}\``, inline: true },
-      { name: 'Points Earned', value: `+${points.toLocaleString()} 🎃`, inline: true },
+      { name: 'Points Earned', value: `+${points.toLocaleString()} ${HALLOWEEN_POINTS_EMOJI}`, inline: true },
     ],
     url,
   });
@@ -103,14 +104,14 @@ function logBossDefeated(client, { bossName, topAttackers }) {
 function logPuzzlePosted(client, { number, reward, channelId }) {
   return log(client, 'PUZZLE', {
     description: `Puzzle #${number} posted in <#${channelId}>.`,
-    fields: [{ name: 'Reward', value: `${reward.toLocaleString()} 🎃`, inline: true }],
+    fields: [{ name: 'Reward', value: `${reward.toLocaleString()} ${HALLOWEEN_POINTS_EMOJI}`, inline: true }],
   });
 }
 
 function logPuzzleSolved(client, { number, userId, reward }) {
   return log(client, 'PUZZLE', {
     description: `<@${userId}> solved Puzzle #${number}.`,
-    fields: [{ name: 'Reward', value: `+${reward.toLocaleString()} 🎃`, inline: true }],
+    fields: [{ name: 'Reward', value: `+${reward.toLocaleString()} ${HALLOWEEN_POINTS_EMOJI}`, inline: true }],
   });
 }
 

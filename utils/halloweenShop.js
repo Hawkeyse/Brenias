@@ -17,7 +17,7 @@ const {
 const User = require('../models/User');
 const ShopRole = require('../models/HalloweenShopRole');
 const cfg = require('./halloweenShopConfig');
-const { addHalloweenPoints } = require('./halloweenPoints');
+const { addHalloweenPoints, HALLOWEEN_POINTS_EMOJI } = require('./halloweenPoints');
 const { log } = require('./halloweenLog');
 const { COLORS } = require('./halloweenReply');
 const { getActiveInfection, cureMember } = require('./halloweenInfection');
@@ -79,6 +79,31 @@ const activeOwned = (guildId, userId) =>
 const findItem = (roleId) =>
   cfg.SHOP_ITEMS.find((i) => i.roleId === roleId) || cfg.FREE_ITEMS.find((i) => i.roleId === roleId);
 
+// Keep free lantern roles below all paid shop roles in Discord's role list so
+// members wearing a bought role can visibly show that role's name color.
+async function arrangeRoleHierarchy(guild) {
+  const paidRoles = cfg.SHOP_ITEMS
+    .map((item) => guild.roles.cache.get(item.roleId))
+    .filter(Boolean);
+  const freeRoles = cfg.FREE_ITEMS
+    .map((item) => guild.roles.cache.get(item.roleId))
+    .filter(Boolean);
+
+  if (!paidRoles.length || !freeRoles.length) return;
+
+  const lowestPaidPosition = Math.min(...paidRoles.map((role) => role.position));
+  const firstFreePosition = Math.max(1, lowestPaidPosition - freeRoles.length);
+
+  try {
+    await guild.roles.setPositions(
+      freeRoles.map((role, index) => ({ role: role.id, position: firstFreePosition + index })),
+      'Halloween Shop: place free roles below paid roles'
+    );
+  } catch (err) {
+    console.error('[halloweenShop] failed to arrange role hierarchy:', err.message);
+  }
+}
+
 // ─── the public panel (staff posts this once in the shop channel) ────────
 // Banner on top, then one button per role (5 per row), then a row with the
 // two free lanterns and a "My Shop" button.
@@ -87,9 +112,9 @@ function buildPanel() {
     .setColor('#FF7518')
     .setTitle('🛒 Halloween Shop')
     .setDescription(
-      'Spend your 🎃 **Halloween Points** on temporary roles. ' +
+      `Spend your ${HALLOWEEN_POINTS_EMOJI} **Halloween Points** on temporary roles. ` +
       'Earn points from the Boss fights, Puzzles and Emote Hunts.\n\n' +
-      `**Price:** ${fmt(cfg.DEFAULT_PRICE)} 🎃 per role\n` +
+      `**Price:** ${fmt(cfg.DEFAULT_PRICE)} ${HALLOWEEN_POINTS_EMOJI} per role\n` +
       `**Lasts:** ${cfg.DEFAULT_DURATION_DAYS} days — each role can be bought once\n` +
       '**Collect:** buy as many different roles as you like\n' +
       `**Everything ends:** <t:${unix(cfg.EVENT_END)}:D>\n\n` +
@@ -175,7 +200,7 @@ async function buildShopView(guildId, userId) {
     .setColor('#FF7518')
     .setTitle('💰 My Shop')
     .setDescription(
-      `**${fmt(points)}** 🎃 Halloween Points\n` +
+      `**${fmt(points)}** ${HALLOWEEN_POINTS_EMOJI} Halloween Points\n` +
       (infection
         ? `🧟 **You are infected!** Your infection expires <t:${unix(infection.expiresAt)}:R>.\n` +
           `Buy the ${cfg.CURE_ITEM.emoji} **Cure Infection** item below to remove it.\n`
@@ -301,7 +326,7 @@ async function buildConfirmView(guildId, userId, item) {
 
   let status;
   if (existing) status = `❌ You already own this role — it expires <t:${unix(existing.expiresAt)}:R>. You can buy it again after it expires.`;
-  else if (!canAfford) status = `❌ You have **${fmt(points)}** 🎃 — you need **${fmt(price - points)}** more.`;
+  else if (!canAfford) status = `❌ You have **${fmt(points)}** ${HALLOWEEN_POINTS_EMOJI} — you need **${fmt(price - points)}** more.`;
   else status = `**Your points:** ${fmt(points)} → **${fmt(points - price)}** after buying`;
 
   const embed = new EmbedBuilder()
@@ -309,7 +334,7 @@ async function buildConfirmView(guildId, userId, item) {
     .setTitle(`Buy ${item.name}?`)
     .setDescription(
       `${item.emoji} <@&${item.roleId}>\n\n` +
-      `**Cost:** ${fmt(price)} 🎃\n` +
+      `**Cost:** ${fmt(price)} ${HALLOWEEN_POINTS_EMOJI}\n` +
       `**Lasts:** ${cfg.DEFAULT_DURATION_DAYS} days\n\n` +
       status
     );
@@ -341,7 +366,7 @@ async function buildCureConfirmView(guildId, userId) {
 
   let status;
   if (!infection) status = '✅ You are not infected.';
-  else if (points < price) status = `❌ You have **${fmt(points)}** 🎃 — you need **${fmt(price - points)}** more.`;
+  else if (points < price) status = `❌ You have **${fmt(points)}** ${HALLOWEEN_POINTS_EMOJI} — you need **${fmt(price - points)}** more.`;
   else status = `**Your points:** ${fmt(points)} → **${fmt(points - price)}** after buying`;
 
   return {
@@ -350,7 +375,7 @@ async function buildCureConfirmView(guildId, userId) {
       .setTitle(`${cfg.CURE_ITEM.emoji} Buy Cure Infection?`)
       .setDescription(
         `Remove your infected role and restore access to the games.\n\n` +
-        `**Cost:** ${fmt(price)} 🎃\n\n${status}`
+        `**Cost:** ${fmt(price)} ${HALLOWEEN_POINTS_EMOJI}\n\n${status}`
       )],
     components: [new ActionRowBuilder().addComponents(
       new ButtonBuilder()
@@ -405,7 +430,7 @@ async function purchaseRole(guild, member, itemKey) {
   );
   if (!charged) {
     const u = await User.findOne({ guildId, userId }).lean();
-    return fail(`Not enough points — it costs **${fmt(price)}** 🎃 and you have **${fmt(u?.halloweenPoints ?? 0)}**.`);
+    return fail(`Not enough points — it costs **${fmt(price)}** ${HALLOWEEN_POINTS_EMOJI} and you have **${fmt(u?.halloweenPoints ?? 0)}**.`);
   }
 
   const refund = () =>
@@ -446,9 +471,9 @@ async function purchaseRole(guild, member, itemKey) {
   log(guild.client, 'SHOP', {
     description: `<@${userId}> bought <@&${item.roleId}>`,
     fields: [
-      { name: 'Cost', value: `${fmt(price)} 🎃`, inline: true },
+      { name: 'Cost', value: `${fmt(price)} ${HALLOWEEN_POINTS_EMOJI}`, inline: true },
       { name: 'Expires', value: `<t:${unix(expiresAt)}:R>`, inline: true },
-      { name: 'Balance', value: `${fmt(charged.halloweenPoints)} 🎃`, inline: true },
+      { name: 'Balance', value: `${fmt(charged.halloweenPoints)} ${HALLOWEEN_POINTS_EMOJI}`, inline: true },
     ],
   }).catch(() => {});
 
@@ -459,7 +484,7 @@ async function purchaseRole(guild, member, itemKey) {
 
   return success(
     `${item.emoji} You bought <@&${item.roleId}>! It expires <t:${unix(expiresAt)}:R>.\n` +
-    `💰 Balance: **${fmt(charged.halloweenPoints)}** 🎃${colorHint}`
+    `💰 Balance: **${fmt(charged.halloweenPoints)}** ${HALLOWEEN_POINTS_EMOJI}${colorHint}`
   );
 }
 
@@ -474,7 +499,7 @@ async function purchaseCure(guild, member) {
   );
   if (!charged) {
     const user = await User.findOne({ guildId: guild.id, userId: member.id }).lean();
-    return fail(`Not enough points — the cure costs **${fmt(cfg.CURE_PRICE)}** 🎃 and you have **${fmt(user?.halloweenPoints ?? 0)}**.`);
+    return fail(`Not enough points — the cure costs **${fmt(cfg.CURE_PRICE)}** ${HALLOWEEN_POINTS_EMOJI} and you have **${fmt(user?.halloweenPoints ?? 0)}**.`);
   }
 
   const cured = await cureMember(guild, member);
@@ -485,7 +510,7 @@ async function purchaseCure(guild, member) {
 
   return success(
     `${cfg.CURE_ITEM.emoji} **You have been cured!** The infected role has been removed.\n` +
-    `💰 Balance: **${fmt(charged.halloweenPoints)}** 🎃`
+    `💰 Balance: **${fmt(charged.halloweenPoints)}** ${HALLOWEEN_POINTS_EMOJI}`
   );
 }
 
@@ -568,6 +593,7 @@ async function sweepExpired(client) {
 
 module.exports = {
   shopItems,
+  arrangeRoleHierarchy,
   buildPanel,
   buildShopView,
   buildRolesView,

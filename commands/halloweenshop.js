@@ -2,7 +2,7 @@
 // /halloween-shop open  — anyone: see your points and shop roles (private)
 // /halloween-shop post  — staff: posts the public shop panel (banner + one button per role)
 const { SlashCommandBuilder, PermissionsBitField } = require('discord.js');
-const { buildPanel, buildShopView } = require('../utils/halloweenShop');
+const { buildPanel, buildShopView, arrangeRoleHierarchy } = require('../utils/halloweenShop');
 const { simpleEmbed, COLORS } = require('../utils/halloweenReply');
 
 module.exports = {
@@ -27,6 +27,7 @@ module.exports = {
           embeds: [simpleEmbed('❌ Only staff (Manage Server) can post the shop panel.', COLORS.error)],
         });
       }
+      await arrangeRoleHierarchy(interaction.guild);
       const { bannerMissing, ...panel } = buildPanel();
       await interaction.channel.send(panel);
       return interaction.editReply({

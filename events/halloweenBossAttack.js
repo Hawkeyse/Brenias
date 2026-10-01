@@ -11,7 +11,7 @@ const {
   buildAttackRow,
   finishBoss,
 } = require('../utils/halloweenBoss');
-const { addHalloweenPoints } = require('../utils/halloweenPoints');
+const { addHalloweenPoints, HALLOWEEN_POINTS_EMOJI } = require('../utils/halloweenPoints');
 const { logBossAttack } = require('../utils/halloweenLog');
 const { simpleEmbed, COLORS } = require('../utils/halloweenReply');
 const { isInfected } = require('../utils/halloweenInfection');
@@ -116,7 +116,7 @@ module.exports = (client) => {
         `Boss HP: **${Math.max(0, boss.currentHP).toLocaleString()} / ${boss.maxHP.toLocaleString()}**`;
 
       if (pointsEarned > 0) {
-        summaryText += `\n🎃 +${pointsEarned.toLocaleString()} Halloween Points earned!`;
+        summaryText += `\n${HALLOWEEN_POINTS_EMOJI} +${pointsEarned.toLocaleString()} Halloween Points earned!`;
       }
       if (bossDefeated) {
         summaryText += `\n\n💀 **You landed the finishing blow!** The boss has been defeated — check the leaderboard channel for final rewards.`;

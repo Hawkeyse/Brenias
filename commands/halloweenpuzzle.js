@@ -2,6 +2,7 @@
 const { SlashCommandBuilder, EmbedBuilder, PermissionsBitField, ChannelType } = require('discord.js');
 const HalloweenPuzzle = require('../models/HalloweenPuzzle');
 const User = require('../models/User');
+const { HALLOWEEN_POINTS_EMOJI } = require('../utils/halloweenPoints');
 const { isInfected } = require('../utils/halloweenInfection');
 
 module.exports = {
@@ -119,7 +120,7 @@ module.exports = {
         .limit(10);
 
       if (topUsers.length === 0) {
-        return interaction.reply('No Halloween Points earned yet — solve today\'s puzzle first! 🧩');
+        return interaction.reply(`No Halloween Points earned yet — solve today\'s puzzle first! ${HALLOWEEN_POINTS_EMOJI}`);
       }
 
       const lines = topUsers.map((u, i) => {

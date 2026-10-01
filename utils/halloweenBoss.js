@@ -4,7 +4,7 @@
 const fs = require('fs');
 const path = require('path');
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, AttachmentBuilder } = require('discord.js');
-const { addHalloweenPoints } = require('./halloweenPoints');
+const { addHalloweenPoints, HALLOWEEN_POINTS_EMOJI } = require('./halloweenPoints');
 const { logBossDefeated, logBossSpawned } = require('./halloweenLog');
 const HalloweenBoss = require('../models/HalloweenBoss');
 
@@ -224,7 +224,7 @@ async function finishBoss(client, boss) {
         const rank = i + 1;
         const bonus = RANK_REWARDS[rank] ?? (rank <= 10 ? TOP10_REWARD : 0);
         const medal = ['🥇', '🥈', '🥉'][i] || `**${rank}.**`;
-        return `${medal} <@${p.userId}> — **${p.damage.toLocaleString()}** dmg (+${bonus.toLocaleString()} 🎃)`;
+        return `${medal} <@${p.userId}> — **${p.damage.toLocaleString()}** dmg (+${bonus.toLocaleString()} ${HALLOWEEN_POINTS_EMOJI})`;
       });
 
       const resultsEmbed = new EmbedBuilder()
