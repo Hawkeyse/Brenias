@@ -7,6 +7,7 @@ const userSchema = new mongoose.Schema({
   xp: { type: Number, default: 0 },
   level: { type: Number, default: 1 },
   halloweenPoints: { type: Number, default: 0 },
+  starterBonusClaimed: { type: Boolean, default: false },
 });
 
 // Make sure one user document per person per server
