@@ -18,6 +18,7 @@ const {
   TextInputStyle,
   Events,
   userMention,
+  Partials,
 } = require('discord.js');
 
 const mongoose = require('mongoose');
@@ -39,7 +40,9 @@ const client = new Client({
     GatewayIntentBits.MessageContent,
     GatewayIntentBits.GuildMembers,
     GatewayIntentBits.GuildModeration,
+    GatewayIntentBits.GuildMessageReactions,
   ],
+  partials: [Partials.Message, Partials.Channel, Partials.Reaction],
 });
 
 // ────────────────────────────────────────────────

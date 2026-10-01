@@ -170,31 +170,74 @@ async function drawInventory(ctx, r, items, hk, pad) {
     fitLeft(ctx, 'Empty', x0, r.y + r.h * 0.55, maxX - x0, { family: 'Manrope', size: 18 * hk, color: '#c9b79a' });
     return;
   }
-  const lineH = 36 * hk, top = r.y + r.h * 0.40;
-  const maxLines = Math.max(1, Math.floor((r.y + r.h - 14 * hk - top) / lineH) + 1);
-  let x = x0, line = 0, shown = 0;
-  for (const it of items) {
-    setFont(ctx, 'ManropeBold', 17 * hk);
-    const label = it.qty > 1 ? `${it.name} ×${it.qty}` : it.name;
-    const w = (it.img ? 28 * hk : 0) + ctx.measureText(label).width + 26 * hk;
-    if (x + w > maxX) { line++; x = x0; }
-    if (line >= maxLines) break;
-    const cy = top + line * lineH + 10 * hk;
-    if (cy + 15 * hk > r.y + r.h - 24 * hk) break;
-    ctx.fillStyle = 'rgba(255,255,255,0.10)'; roundRect(ctx, x, cy - 15 * hk, w, 30 * hk, 15 * hk); ctx.fill();
-    let tx = x + 12 * hk;
-    if (it.img) { drawIcon(ctx, it.img, x + 12 * hk + 11 * hk, cy, 24 * hk); tx += 28 * hk; }
-    ctx.fillStyle = '#fff'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillText(label, tx, cy + 1);
-    x += w + 8 * hk; shown++;
+  const innerW = maxX - x0, startY = r.y + r.h * 0.43, bottomY = r.y + r.h - 5 * hk;
+  let layout = null, fontSize = Math.min(17 * hk, 15);
+
+  while (fontSize >= 6 && !layout) {
+    const lineH = fontSize * 1.55;
+    const maxLines = Math.max(1, Math.floor((bottomY - startY) / lineH) + 1);
+    const rowWidths = [0], entries = [];
+    let fits = true;
+
+    setFont(ctx, 'ManropeBold', fontSize);
+    for (const item of items) {
+      const label = item.qty > 1 ? `${item.name} ×${item.qty}` : item.name;
+      const padding = fontSize * 0.65, iconSize = fontSize * 1.25;
+      const iconWidth = item.img ? iconSize + fontSize * 0.2 : 0;
+      const width = padding * 2 + iconWidth + ctx.measureText(label).width;
+      if (width > innerW) { fits = false; break; }
+
+      let line = rowWidths.length - 1;
+      const gap = rowWidths[line] ? fontSize * 0.35 : 0;
+      if (rowWidths[line] + gap + width > innerW) {
+        line++;
+        if (line >= maxLines) { fits = false; break; }
+        rowWidths.push(0);
+      }
+      const itemGap = rowWidths[line] ? fontSize * 0.35 : 0;
+      const x = x0 + rowWidths[line] + itemGap;
+      rowWidths[line] += itemGap + width;
+      entries.push({ item, label, x, width, line, padding, iconSize, iconWidth });
+    }
+
+    if (fits) layout = { lineH, entries };
+    else fontSize -= 0.5;
   }
-  const rest = items.length - shown;
-  if (rest > 0) {
-    setFont(ctx, 'ManropeBold', 16 * hk);
-    ctx.fillStyle = TAN; ctx.textBaseline = 'middle';
-    const tag = `+${rest} more`;
-    const tw = ctx.measureText(tag).width;
-    ctx.textAlign = 'right'; ctx.fillText(tag, maxX, r.y + r.h * 0.22); ctx.textAlign = 'left';
-    void tw;
+
+  if (!layout) {
+    fontSize = 6;
+    const lineH = fontSize * 1.55, rowWidths = [0], entries = [];
+    setFont(ctx, 'ManropeBold', fontSize);
+    for (const item of items) {
+      const label = item.qty > 1 ? `${item.name} ×${item.qty}` : item.name;
+      const padding = fontSize * 0.65, iconSize = fontSize * 1.25;
+      const iconWidth = item.img ? iconSize + fontSize * 0.2 : 0;
+      const width = Math.min(innerW, padding * 2 + iconWidth + ctx.measureText(label).width);
+      let line = rowWidths.length - 1;
+      const gap = rowWidths[line] ? fontSize * 0.35 : 0;
+      if (rowWidths[line] + gap + width > innerW) { line++; rowWidths.push(0); }
+      const itemGap = rowWidths[line] ? fontSize * 0.35 : 0;
+      const x = x0 + rowWidths[line] + itemGap;
+      rowWidths[line] += itemGap + width;
+      entries.push({ item, label, x, width, line, padding, iconSize, iconWidth });
+    }
+    layout = { lineH, entries };
+  }
+
+  const pillH = Math.min(fontSize * 1.4, layout.lineH * 0.9);
+  setFont(ctx, 'ManropeBold', fontSize);
+  for (const entry of layout.entries) {
+    const cy = startY + entry.line * layout.lineH;
+    ctx.fillStyle = 'rgba(255,255,255,0.10)';
+    roundRect(ctx, entry.x, cy - pillH / 2, entry.width, pillH, pillH / 2);
+    ctx.fill();
+    let textX = entry.x + entry.padding;
+    if (entry.item.img) {
+      drawIcon(ctx, entry.item.img, textX + entry.iconSize / 2, cy, entry.iconSize);
+      textX += entry.iconWidth;
+    }
+    ctx.fillStyle = '#fff'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    ctx.fillText(entry.label, textX, cy + 1, entry.width - (textX - entry.x) - entry.padding);
   }
 }
 
@@ -215,11 +258,11 @@ async function renderCard(tpl, d) {
   ctx.restore();
 
   // header: glowing name
-  const H = L.header, nx = H.x + H.w * 0.13, ny = H.y + H.h * 0.52, nameW = H.w * 0.84;
-  let fs = H.h * 0.40;
+  const H = L.header, nx = H.x + H.w * 0.16, ny = H.y + H.h * 0.52, nameW = H.w * 0.80;
+  let fs = H.h * 0.48;
   setFont(ctx, 'RubikDirt', fs);
   const name = d.name.toUpperCase();
-  while (ctx.measureText(name).width > nameW && fs > 20) { fs -= 2; setFont(ctx, 'RubikDirt', fs); }
+  while (ctx.measureText(name).width > nameW && fs > 12) { fs -= 1; setFont(ctx, 'RubikDirt', fs); }
   const grad = ctx.createLinearGradient(0, ny - fs / 2, 0, ny + fs / 2);
   grad.addColorStop(0, '#ffd04a'); grad.addColorStop(1, '#ff9a1f');
   ctx.save();
