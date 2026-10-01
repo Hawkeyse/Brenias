@@ -260,19 +260,23 @@ async function renderCard(tpl, d) {
   catch (_) { ctx.fillStyle = '#222'; ctx.fillRect(a.cx - a.r, a.cy - a.r, a.r * 2, a.r * 2); }
   ctx.restore();
 
-  // header: glowing name
-  const H = L.header, nx = H.x + H.w * 0.16, ny = H.y + H.h * 0.52, nameW = H.w * 0.80;
-  let fs = H.h * 0.48;
+  // header: glowing name and subtitle
+  const H = L.header, nx = H.x + H.w * 0.16, nameY = H.y + H.h * 0.34, nameW = H.w * 0.82;
+  let fs = H.h * 0.54;
   setFont(ctx, 'RubikDirt', fs);
-  const name = d.name.toUpperCase();
-  while (ctx.measureText(name).width > nameW && fs > 12) { fs -= 1; setFont(ctx, 'RubikDirt', fs); }
-  const grad = ctx.createLinearGradient(0, ny - fs / 2, 0, ny + fs / 2);
+  let name = d.name.toUpperCase();
+  while (ctx.measureText(name).width > nameW && fs > 12) { fs = Math.max(12, fs - 1); setFont(ctx, 'RubikDirt', fs); }
+  while (ctx.measureText(name).width > nameW && name.length > 1) name = `${name.slice(0, -2)}…`;
+  const grad = ctx.createLinearGradient(0, nameY - fs / 2, 0, nameY + fs / 2);
   grad.addColorStop(0, '#ffd04a'); grad.addColorStop(1, '#ff9a1f');
   ctx.save();
   ctx.shadowColor = 'rgba(255,120,0,0.75)'; ctx.shadowBlur = 14;
   ctx.fillStyle = grad; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
-  ctx.fillText(name, nx, ny);
+  ctx.fillText(name, nx, nameY);
   ctx.restore();
+  fitLeft(ctx, 'HALLOWEEN PROFILE', nx, H.y + H.h * 0.76, nameW, {
+    size: H.h * 0.15, min: 8, color: TAN, sp: H.h * 0.018,
+  });
   // six stat boxes
   const status = d.infected
     ? { iconName: 'skull', label: 'Status', value: 'Infected', valueColor: '#ff5a4d' }
