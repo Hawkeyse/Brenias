@@ -5,6 +5,7 @@
   "main": "index.js",
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
+    "@napi-rs/canvas": "^1.0.9",
     "abbrev": "^1.1.1",
     "abort-controller": "^3.0.0",
     "agent-base": "^7.1.4",

@@ -1,5 +1,5 @@
 const path = require('path');
-const { createCanvas, loadImage } = require('canvas');
+const { createCanvas, loadImage } = require('@napi-rs/canvas');
 
 const WIDTH = 900;
 const HEIGHT = 400;
