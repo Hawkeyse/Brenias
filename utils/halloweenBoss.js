@@ -9,7 +9,12 @@ const { logBossDefeated, logBossSpawned } = require('./halloweenLog');
 const HalloweenBoss = require('../models/HalloweenBoss');
 
 const LEADERBOARD_CHANNEL_ID = '1549040166964957265';
-const ASSETS_DIR = path.join(__dirname, '../assets/halloween');
+const BOSS_ASSET_DIRS = [
+  path.join(__dirname, '../Assets/halloween'),
+  path.join(__dirname, '../assets/halloween'),
+  path.join(__dirname, '../Assets'),
+  path.join(__dirname, '../assets'),
+];
 
 // Each boss "skin" is a pair of portraits (alive/defeated) plus a default
 // name to use when staff don't set one. Add more here any time — staff
@@ -129,7 +134,7 @@ function buildAttackRow(disabled = false) {
 /**
  * Returns the AttachmentBuilder for whichever boss image (alive/defeated,
  * for this boss's skin) matches its current state, or null if that file
- * hasn't been added to assets/halloween/ yet. Anywhere a message is sent
+ * hasn't been added to Assets/halloween/ yet. Anywhere a message is sent
  * or edited with buildBossEmbed(boss), pass this in `files` too — the
  * embed's attachment:// reference only resolves if the file is actually
  * attached to that specific send/edit call (or was already attached
@@ -139,8 +144,10 @@ function getBossImageAttachment(boss) {
   const alive = boss.active && boss.currentHP > 0;
   const skin = getSkin(boss.skin);
   const filename = alive ? skin.aliveImage : skin.deadImage;
-  const filePath = path.join(ASSETS_DIR, filename);
-  if (!fs.existsSync(filePath)) return null;
+  const filePath = BOSS_ASSET_DIRS
+    .map((directory) => path.join(directory, filename))
+    .find((candidate) => fs.existsSync(candidate));
+  if (!filePath) return null;
   return new AttachmentBuilder(filePath, { name: filename });
 }
 
