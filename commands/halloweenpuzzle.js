@@ -1,5 +1,5 @@
 // commands/halloweenpuzzle.js
-const { SlashCommandBuilder, EmbedBuilder, PermissionsBitField, ChannelType } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder, PermissionsBitField, ChannelType, MessageFlags } = require('discord.js');
 const HalloweenPuzzle = require('../models/HalloweenPuzzle');
 const HalloweenPuzzleSchedule = require('../models/HalloweenPuzzleSchedule');
 const User = require('../models/User');
@@ -12,10 +12,10 @@ module.exports = {
     .setDescription('Manage the AI-generated Halloween Puzzle 🧩')
     .addSubcommand(sub => sub
       .setName('setup')
-      .setDescription('Start automatic AI puzzles in a channel (staff only).')
+      .setDescription('Start automatic puzzles in a channel (staff only).')
       .addChannelOption(opt => opt
         .setName('channel')
-        .setDescription('Channel for the AI-generated puzzles.')
+        .setDescription('Channel for the generated puzzles.')
         .addChannelTypes(ChannelType.GuildText)
         .setRequired(true)))
     .addSubcommand(sub => sub
@@ -38,9 +38,9 @@ module.exports = {
 
     if (sub === 'setup') {
       if (!staffGate()) {
-        return interaction.reply({ content: 'You need Manage Server permission to set up automatic puzzles.', ephemeral: true });
+        return interaction.reply({ content: 'You need Manage Server permission to set up automatic puzzles.', flags: MessageFlags.Ephemeral });
       }
-      await interaction.deferReply({ ephemeral: true });
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
       const channel = interaction.options.getChannel('channel');
       const active = await HalloweenPuzzle.findOne({ guildId, channelId: channel.id, solved: false });
       if (active) return interaction.editReply(`There is already an unsolved puzzle in ${channel}.`);
@@ -51,7 +51,7 @@ module.exports = {
       );
       const result = await postNextPuzzle(interaction.client, guildId, { force: true });
       return interaction.editReply(result.posted
-        ? `✅ AI puzzle posted in ${channel}. The next one follows 10 minutes after a correct answer.`
+        ? `✅  puzzle posted in ${channel}. The next one follows 10 minutes after a correct answer.`
         : 'Puzzle automation is already active.');
     }
 
@@ -64,23 +64,23 @@ module.exports = {
       const timing = schedule.nextPostAt
         ? `Next puzzle: <t:${Math.floor(schedule.nextPostAt.getTime() / 1000)}:R>.`
         : active ? 'Waiting for someone to solve the current puzzle.' : 'No puzzle is queued right now.';
-      return interaction.reply(`AI puzzles are on in <#${schedule.channelId}>. ${timing}`);
+      return interaction.reply(`puzzles are on in <#${schedule.channelId}>. ${timing}`);
     }
 
     if (sub === 'stop') {
-      if (!staffGate()) return interaction.reply({ content: 'You need Manage Server permission to stop automatic puzzles.', ephemeral: true });
+      if (!staffGate()) return interaction.reply({ content: 'You need Manage Server permission to stop automatic puzzles.', flags: MessageFlags.Ephemeral });
       await HalloweenPuzzleSchedule.updateOne({ guildId }, { $set: { enabled: false, nextPostAt: null } });
-      return interaction.reply({ content: 'Automatic Halloween puzzles are stopped.', ephemeral: true });
+      return interaction.reply({ content: 'Automatic Halloween puzzles are stopped.', flags: MessageFlags.Ephemeral });
     }
 
     if (sub === 'reveal') {
       if (!staffGate()) {
-        return interaction.reply({ content: 'You need Manage Server permission to reveal a puzzle.', ephemeral: true });
+        return interaction.reply({ content: 'You need Manage Server permission to reveal a puzzle.', flags: MessageFlags.Ephemeral });
       }
 
       const puzzle = await HalloweenPuzzle.findOne({ guildId, solved: false }).sort({ number: -1 });
       if (!puzzle) {
-        return interaction.reply({ content: 'No unsolved puzzle to reveal.', ephemeral: true });
+        return interaction.reply({ content: 'No unsolved puzzle to reveal.', flags: MessageFlags.Ephemeral });
       }
 
       puzzle.solved = true;
@@ -94,7 +94,7 @@ module.exports = {
       if (channel) await channel.send({ embeds: [embed] }).catch(() => {});
       await logPuzzleRevealed(interaction.client, { number: puzzle.number, answer: puzzle.answer });
       await scheduleNextPuzzle(guildId);
-      return interaction.reply({ content: `✅ Puzzle #${puzzle.number} revealed.`, ephemeral: true });
+      return interaction.reply({ content: `✅ Puzzle #${puzzle.number} revealed.`, flags: MessageFlags.Ephemeral });
     }
 
     if (sub === 'leaderboard') {

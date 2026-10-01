@@ -1,4 +1,3 @@
-const { GoogleGenerativeAI } = require('@google/generative-ai');
 const { ChannelType, EmbedBuilder } = require('discord.js');
 const HalloweenPuzzle = require('../models/HalloweenPuzzle');
 const HalloweenPuzzleSchedule = require('../models/HalloweenPuzzleSchedule');
@@ -8,26 +7,96 @@ const NEXT_PUZZLE_DELAY_MS = 10 * 60 * 1000;
 const RETRY_DELAY_MS = 60 * 1000;
 const REWARD_POINTS = 300;
 const postingGuilds = new Set();
+const DAILY_QUOTA_COOLDOWN_MS = 24 * 60 * 60 * 1000;
+let aiCooldownUntil = 0;
+let lastQuotaWarningAt = 0;
+let lastFallbackIndex = -1;
+
+const FALLBACK_PUZZLES = [
+  { question: 'I have hands but cannot clap, and a face but cannot smile. What am I?', answer: 'clock' },
+  { question: 'The more you take away from me, the larger I become. What am I?', answer: 'a hole' },
+  { question: 'I have teeth but never bite, and I help tame a tangled mane. What am I?', answer: 'comb' },
+  { question: 'I get wetter while helping you dry off after a midnight swim. What am I?', answer: 'towel' },
+  { question: 'I have keys but open no locks, and music lives beneath my fingers. What am I?', answer: 'piano' },
+  { question: 'I have a neck but no head, and I may hold a potion for a witch. What am I?', answer: 'bottle' },
+  { question: 'I fly without wings, cry without eyes, and darkness follows wherever I go. What am I?', answer: 'cloud' },
+  { question: 'I have one eye but cannot see, though I help stitch a spooky disguise. What am I?', answer: 'needle' },
+  { question: 'I have a bed but never sleep, and I run without legs past the haunted mill. What am I?', answer: 'river' },
+  { question: 'I guard a tiny flame, grow shorter as I work, and often glow in a pumpkin. What am I?', answer: 'candle' },
+  { question: 'I have many branches but no leaves, and the ghost may keep treasure in me. What am I?', answer: 'bank' },
+  { question: 'I am full of holes but still hold water for a thirsty monster. What am I?', answer: 'sponge' },
+];
+
+function fallbackPuzzle() {
+  let index = Math.floor(Math.random() * FALLBACK_PUZZLES.length);
+  if (FALLBACK_PUZZLES.length > 1 && index === lastFallbackIndex) {
+    index = (index + 1 + Math.floor(Math.random() * (FALLBACK_PUZZLES.length - 1))) % FALLBACK_PUZZLES.length;
+  }
+  lastFallbackIndex = index;
+  return FALLBACK_PUZZLES[index];
+}
 
 async function generatePuzzle() {
-  if (!process.env.GEMINI_API_KEY) throw new Error('GEMINI_API_KEY is not configured.');
+  if (!process.env.OPENAI_API_KEY || Date.now() < aiCooldownUntil) return fallbackPuzzle();
 
-  const model = new GoogleGenerativeAI(process.env.GEMINI_API_KEY).getGenerativeModel({
-    model: 'gemini-2.5-flash-lite',
-    generationConfig: { responseMimeType: 'application/json' },
-  });
-  const result = await model.generateContent(
-    'Create one original, short Halloween riddle for a Discord game. The answer must be a single ' +
-    'common word or short phrase, unambiguous, and not included in the riddle. Return only JSON ' +
-    'with string properties "question" and "answer". The question should be one or two sentences.'
-  );
-  const puzzle = JSON.parse(result.response.text());
-  const question = String(puzzle.question || '').trim();
-  const answer = String(puzzle.answer || '').trim().toLowerCase();
-  if (!question || !answer || question.length > 800 || answer.length > 60) {
-    throw new Error('AI returned an invalid Halloween puzzle.');
+  try {
+    const response = await fetch('https://api.openai.com/v1/responses', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      signal: AbortSignal.timeout(15000),
+      body: JSON.stringify({
+        model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
+        instructions:
+          'Create one original, short Halloween riddle for a Discord game. The answer must be a single ' +
+          'common word or short phrase, unambiguous, and not included in the riddle. Return only JSON ' +
+          'with string properties question and answer. The question should be one or two sentences.',
+        input: 'Generate one Halloween riddle and its answer.',
+        text: { format: { type: 'json_object' } },
+        max_output_tokens: 160,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.text();
+      const error = new Error(`OpenAI returned HTTP ${response.status}: ${errorBody.slice(0, 400)}`);
+      error.status = response.status;
+      error.retryAfter = response.headers.get('retry-after');
+      throw error;
+    }
+
+    const payload = await response.json();
+    const rawText = payload.output_text || payload.output
+      ?.flatMap((block) => block.content || [])
+      .find((item) => item.type === 'output_text')?.text;
+    if (!rawText) throw new Error('OpenAI returned no puzzle text.');
+
+    const puzzle = JSON.parse(rawText.replace(/^```(?:json)?\s*|\s*```$/g, ''));
+    const question = String(puzzle.question || '').trim();
+    const answer = String(puzzle.answer || '').trim().toLowerCase();
+    if (!question || !answer || question.length > 800 || answer.length > 60) {
+      throw new Error('OpenAI returned an invalid Halloween puzzle.');
+    }
+    return { question, answer };
+  } catch (error) {
+    const isRateLimit = error.status === 429 || /quota|rate.?limit/i.test(error.message || '');
+    if (isRateLimit) {
+      const dailyLimit = /per.?day|daily|quota.?exceeded|current quota|insufficient[_ -]quota|billing/i.test(error.message || '');
+      const retryAfterMs = Number(error.retryAfter) * 1000;
+      aiCooldownUntil = Date.now() + (dailyLimit
+        ? DAILY_QUOTA_COOLDOWN_MS
+        : Number.isFinite(retryAfterMs) && retryAfterMs > 0 ? retryAfterMs : 15 * 60 * 1000);
+      if (Date.now() - lastQuotaWarningAt > 60 * 60 * 1000) {
+        console.warn('[halloweenPuzzle] OpenAI quota/rate limit reached; using local riddles until cooldown expires.');
+        lastQuotaWarningAt = Date.now();
+      }
+    } else {
+      console.error('[halloweenPuzzle] OpenAI puzzle generation failed; using local riddle:', error.message);
+    }
+    return fallbackPuzzle();
   }
-  return { question, answer };
 }
 
 async function postNextPuzzle(client, guildId, { force = false } = {}) {
