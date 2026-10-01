@@ -4,18 +4,12 @@
 //
 // NOTE: this requires the GuildMessageReactions intent and Message/Channel/
 // Reaction partials enabled on the client — see the note in index.js.
-const { Events, EmbedBuilder, ChannelType, PermissionsBitField } = require('discord.js');
+const { Events, EmbedBuilder } = require('discord.js');
 const EmoteHunt = require('../models/EmoteHunt');
 const { addHalloweenPoints } = require('../utils/halloweenPoints');
 const { logEmoteHuntFound } = require('../utils/halloweenLog');
 const { formatEmote } = require('../utils/halloweenEmotes');
-
-const PUBLIC_TEXT_CHANNEL_TYPES = new Set([
-  ChannelType.GuildText,
-  ChannelType.GuildAnnouncement,
-  ChannelType.AnnouncementThread,
-  ChannelType.PublicThread,
-]);
+const { EMOTE_HUNT_CHANNEL_ID } = require('../utils/emoteHunt');
 
 module.exports = (client) => {
   client.on(Events.MessageReactionAdd, async (reaction, user) => {
@@ -32,14 +26,12 @@ module.exports = (client) => {
 
       const guildId = reaction.message.guild?.id;
       const channel = reaction.message.channel;
-      if (!guildId || !PUBLIC_TEXT_CHANNEL_TYPES.has(channel.type)) return;
-
-      const everyoneCanView = channel.permissionsFor(reaction.message.guild.roles.everyone)
-        ?.has(PermissionsBitField.Flags.ViewChannel);
-      if (!everyoneCanView) return;
+      if (!guildId || channel.id !== EMOTE_HUNT_CHANNEL_ID) return;
 
       const hunt = await EmoteHunt.findOne({
         guildId,
+        channelId: channel.id,
+        messageId: reaction.message.id,
         active: true,
       });
       if (!hunt) return;
@@ -76,12 +68,14 @@ module.exports = (client) => {
           `We have a winner!\n\n` +
           `🏆 ${user} was the first person to find the hidden ${foundEmote} emote!\n` +
           `🎁 Reward: \`+${claimed.reward.toLocaleString()} Halloween Points\` 🎃\n\n` +
-          `⚡ That was fast! Think you can beat them next round?\n` +
-          `👻 Another hunt is coming soon...\n\n` +
+          `⏰ The next emote hunt starts in 2 hours.\n\n` +
           `🔗 [Jump to the hunt](${reaction.message.url})`
         );
 
-      await reaction.message.reply({ embeds: [revealEmbed] }).catch(() => {});
+      await channel.send({
+        embeds: [revealEmbed],
+        allowedMentions: { users: [user.id] },
+      }).catch(() => {});
     } catch (err) {
       console.error('[emoteHuntGuess] error:', err);
     }
