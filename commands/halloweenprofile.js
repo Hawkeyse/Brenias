@@ -1,8 +1,14 @@
-const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder, AttachmentBuilder } = require('discord.js');
+const { RankCardBuilder, Font } = require('canvacord');
+const path = require('path');
 const User = require('../models/User');
 const ShopRole = require('../models/HalloweenShopRole');
 const { getActiveInfection } = require('../utils/halloweenInfection');
 const { HALLOWEEN_POINTS_EMOJI } = require('../utils/halloweenPoints');
+
+Font.loadDefault();
+const SEASON_GOAL = 10000;
+const SEASON_BACKGROUND = path.join(__dirname, '../banners/001.jpg');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -46,6 +52,30 @@ module.exports = {
       )
       .setFooter({ text: 'October Season • Points, roles, and infection status' });
 
-    return interaction.editReply({ embeds: [embed] });
+    const rankCard = new RankCardBuilder()
+      .setAvatar(target.displayAvatarURL({ extension: 'png', size: 256, forceStatic: true }))
+      .setDisplayName(target.username)
+      .setCurrentXP(Math.min(points, SEASON_GOAL))
+      .setRequiredXP(SEASON_GOAL)
+      .setLevel(1)
+      .setRank(rank + 1)
+      .setStatus(null)
+      .setBackground(SEASON_BACKGROUND)
+      .setOverlay(65);
+
+    rankCard.setStyles({
+      progressbar: {
+        thumb: { style: { backgroundColor: '#FF7518', borderRadius: '9999px' } },
+        track: { style: { backgroundColor: '#ffffff', opacity: 0.15 } },
+      },
+      username: { style: { color: '#ffffff', fontSize: 32, textShadow: '0 2px 4px rgba(0,0,0,0.6)' } },
+      level: { style: { color: '#ffffff' } },
+      rank: { style: { color: '#ffffff' } },
+      xp: { style: { color: '#dddddd' } },
+    });
+
+    const imageBuffer = await rankCard.build({ format: 'png' });
+    const attachment = new AttachmentBuilder(imageBuffer, { name: `halloween-rank-${target.id}.png` });
+    return interaction.editReply({ embeds: [embed], files: [attachment] });
   },
 };
