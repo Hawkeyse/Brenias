@@ -29,18 +29,18 @@ const IGNORED_CHANNEL_IDS = [];
 
 // Cinematic horror searches — one is picked at random for each scare.
 const GIPHY_SEARCH_TERMS = [
-  'horror movie jumpscare',
-  'scary movie sudden face',
-  'the conjuring jumpscare',
-  'insidious red face demon',
-  'the nun valak jumpscare',
-  'it pennywise scary scene',
-  'scream ghostface jumpscare',
-  'freddy krueger nightmare scene',
-  'the grudge kayako jumpscare',
-  'ring samara tv scene',
-  'alien horror movie reveal',
-  'creepy found footage horror',
+  'pennywise scary close up teeth',
+  'pennywise jumpscare face',
+  'it clown terrifying face',
+  'horror monster face close up',
+  'scary creature teeth jumpscare',
+  'demon face sudden jumpscare',
+  'the nun terrifying close up',
+  'insidious red demon jumpscare',
+  'ghostface scary close up',
+  'horror clown evil smile',
+  'scary face scream reaction',
+  'horror movie monster jumpscare',
 ];
 // GIPHY content rating: 'g' | 'pg' | 'pg-13' | 'r'.  pg-13 keeps it spooky, not gory.
 const GIPHY_RATING = 'pg-13';
