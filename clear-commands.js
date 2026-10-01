@@ -1,13 +1,10 @@
 // clear-commands.js
-// One-time cleanup: wipes Discord slash commands from BOTH the global scope
-// and the specific guild scope. Run this if the same command is showing up
-// twice in Discord's "/" picker — that almost always means the same command
-// name got registered both globally AND to your guild at different points
-// (deploy-commands.js only ever clears one scope per run, whichever
-// GLOBAL_DEPLOY/GUILD_ID pointed it at that time).
+// One-time cleanup: wipes Discord slash commands from the global scope and
+// every guild the bot is currently in. Run this if commands are duplicated
+// in Discord's "/" picker because they were registered in multiple scopes.
 //
-// After running this, wait a moment, then run deploy-commands.js ONCE with
-// a consistent GLOBAL_DEPLOY/GUILD_ID setting going forward.
+// After running this, run deploy-commands.js once with a consistent
+// GLOBAL_DEPLOY/GUILD_ID setting going forward.
 
 require('dotenv').config();
 const { REST, Routes } = require('discord.js');
@@ -28,25 +25,21 @@ const rest = new REST({ version: '10' }).setToken(TOKEN);
     console.log('🗑️  Clearing GLOBAL commands...');
     const globalExisting = await rest.get(Routes.applicationCommands(CLIENT_ID));
     console.log(`   Found ${globalExisting.length} global command(s)`);
-    for (const cmd of globalExisting) {
-      await rest.delete(Routes.applicationCommand(CLIENT_ID, cmd.id));
-      console.log(`   Deleted global: /${cmd.name}`);
-    }
-    // Belt-and-suspenders: an empty PUT wipes everything in one call too,
-    // in case anything above got missed (e.g. a command added mid-loop).
+      await rest.put(Routes.applicationCommands(CLIENT_ID), { body: [] });
+      console.log('   Cleared global commands.');
     await rest.put(Routes.applicationCommands(CLIENT_ID), { body: [] });
 
-    if (GUILD_ID) {
-      console.log(`\n🗑️  Clearing GUILD commands for ${GUILD_ID}...`);
-      const guildExisting = await rest.get(Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID));
+    const guilds = GUILD_ID
+      ? [{ id: GUILD_ID }]
+      : await rest.get(Routes.userGuilds());
+
+    for (const guild of guilds) {
+      console.log(`\n🗑️  Clearing GUILD commands for ${guild.id}...`);
+      const guildExisting = await rest.get(Routes.applicationGuildCommands(CLIENT_ID, guild.id));
       console.log(`   Found ${guildExisting.length} guild command(s)`);
-      for (const cmd of guildExisting) {
-        await rest.delete(Routes.applicationGuildCommand(CLIENT_ID, GUILD_ID, cmd.id));
-        console.log(`   Deleted guild: /${cmd.name}`);
-      }
-      await rest.put(Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID), { body: [] });
-    } else {
-      console.log('\nℹ️  No GUILD_ID set in .env — skipped guild-scope clearing.');
+        await rest.put(Routes.applicationGuildCommands(CLIENT_ID, guild.id), { body: [] });
+        console.log('   Cleared guild commands.');
+      await rest.put(Routes.applicationGuildCommands(CLIENT_ID, guild.id), { body: [] });
     }
 
     console.log('\n✅ All commands cleared from every scope.');
