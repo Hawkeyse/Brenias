@@ -65,11 +65,11 @@ function getTodaysRotationSkin(date = new Date()) {
 
 const ATTACK_COOLDOWN_MS = 30 * 60 * 1000; // 1 attack per 30 min per user
 
-// Damage roll tuning — adjust freely, everything else derives from these.
-const MIN_DAMAGE = 150;
-const MAX_DAMAGE = 450;
+// Damage scales with Boss HP: normal hits deal 5-10%, critical hits deal 8-10%.
+const MIN_DAMAGE_RATIO = 0.05;
+const CRIT_MIN_DAMAGE_RATIO = 0.08;
+const MAX_DAMAGE_RATIO = 0.10;
 const CRIT_CHANCE = 0.15;
-const CRIT_MULTIPLIER = 2;
 
 const PARTICIPATION_REWARD = 400; // paid once, on a user's first attack
 
@@ -85,10 +85,13 @@ const DAMAGE_TIERS = [
 const RANK_REWARDS = { 1: 5000, 2: 3000, 3: 2000 }; // ranks 4-10 use TOP10_REWARD
 const TOP10_REWARD = 1000;
 
-function rollDamage() {
-  const base = Math.floor(Math.random() * (MAX_DAMAGE - MIN_DAMAGE + 1)) + MIN_DAMAGE;
+function rollDamage(maxHP = DEFAULT_BOSS_HP) {
   const isCrit = Math.random() < CRIT_CHANCE;
-  return { damage: isCrit ? base * CRIT_MULTIPLIER : base, isCrit };
+  const minRatio = isCrit ? CRIT_MIN_DAMAGE_RATIO : MIN_DAMAGE_RATIO;
+  const minDamage = Math.max(1, Math.ceil(maxHP * minRatio));
+  const maxDamage = Math.max(minDamage, Math.floor(maxHP * MAX_DAMAGE_RATIO));
+  const damage = Math.floor(Math.random() * (maxDamage - minDamage + 1)) + minDamage;
+  return { damage, isCrit };
 }
 
 function renderHpBar(current, max, size = 20) {

@@ -11,13 +11,13 @@ const {
   buildAttackRow,
   finishBoss,
 } = require('../utils/halloweenBoss');
-const { addHalloweenPoints, HALLOWEEN_POINTS_EMOJI } = require('../utils/halloweenPoints');
+const { addHalloweenPoints } = require('../utils/halloweenPoints');
 const { logBossAttack } = require('../utils/halloweenLog');
 const { simpleEmbed, COLORS } = require('../utils/halloweenReply');
-const { isInfected } = require('../utils/halloweenInfection');
 
-// Serializes attacks per guild so two users cannot load and save stale boss
-// documents at the same time, which would make HP appear to move backward.
+// Guards against a user's double-click being processed twice before the
+// first click's DB round-trip finishes. Not a substitute for the real
+// 30-minute cooldown below — just prevents a race on rapid double-taps.
 const processing = new Set();
 
 module.exports = (client) => {
@@ -26,17 +26,10 @@ module.exports = (client) => {
 
     const guildId = interaction.guild.id;
     const userId = interaction.user.id;
-    const lockKey = guildId;
-
-    if (await isInfected(guildId, userId)) {
-      return interaction.reply({
-        embeds: [simpleEmbed('🧟 You are infected and cannot attack the Boss. Visit the Halloween Shop to buy a cure.', COLORS.warning)],
-        ephemeral: true,
-      }).catch(() => {});
-    }
+    const lockKey = `${guildId}-${userId}`;
 
     if (processing.has(lockKey)) {
-      return interaction.reply({ embeds: [simpleEmbed('⏳ Another attack is still processing, hang on!', COLORS.warning)], ephemeral: true }).catch(() => {});
+      return interaction.reply({ embeds: [simpleEmbed('⏳ Still processing your last attack, hang on!', COLORS.warning)], ephemeral: true }).catch(() => {});
     }
     processing.add(lockKey);
 
@@ -61,7 +54,9 @@ module.exports = (client) => {
       }
 
       const isFirstAttack = !participant || participant.attackCount === 0;
-      const { damage, isCrit } = rollDamage();
+      const attack = rollDamage(boss.maxHP);
+      const damage = Math.min(boss.currentHP, attack.damage);
+      const { isCrit } = attack;
       const prevDamage = participant ? participant.damage : 0;
       const newTotal = prevDamage + damage;
       const alreadyClaimed = participant ? participant.tiersClaimed : [];
@@ -116,7 +111,7 @@ module.exports = (client) => {
         `Boss HP: **${Math.max(0, boss.currentHP).toLocaleString()} / ${boss.maxHP.toLocaleString()}**`;
 
       if (pointsEarned > 0) {
-        summaryText += `\n${HALLOWEEN_POINTS_EMOJI} +${pointsEarned.toLocaleString()} Halloween Points earned!`;
+        summaryText += `\n🎃 +${pointsEarned.toLocaleString()} Halloween Points earned!`;
       }
       if (bossDefeated) {
         summaryText += `\n\n💀 **You landed the finishing blow!** The boss has been defeated — check the leaderboard channel for final rewards.`;
