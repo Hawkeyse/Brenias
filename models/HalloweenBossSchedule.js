@@ -7,7 +7,7 @@ const scheduleSchema = new mongoose.Schema({
   enabled: { type: Boolean, default: false },
   hour: { type: Number, default: 18 },   // UTC hour, 0-23
   minute: { type: Number, default: 0 },  // 0-59
-  hp: { type: Number, default: 50000 },
+  hp: { type: Number, default: 5000 },
   channelId: { type: String, default: null }, // null = fall back to the default boss channel
   // 'YYYY-MM-DD' (UTC) of the last auto-post, so the scheduler doesn't
   // double-post if it checks again within the same minute/day.

@@ -5,11 +5,17 @@ const {
 } = require('discord.js');
 const HalloweenBoss = require('../models/HalloweenBoss');
 const HalloweenBossSchedule = require('../models/HalloweenBossSchedule');
-const { BOSS_SKINS, spawnBoss, finishBoss } = require('../utils/halloweenBoss');
+const {
+  BOSS_SKINS,
+  DEFAULT_BOSS_HP,
+  MAX_BOSS_HP,
+  normalizeBossHp,
+  spawnBoss,
+  finishBoss,
+} = require('../utils/halloweenBoss');
 
 const DEFAULT_BOSS_CHANNEL_ID = '1549050285798981682';
 const BOSS_CHANNEL_TYPES = [ChannelType.GuildText, ChannelType.GuildAnnouncement];
-const DEFAULT_HP = 50000;
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -32,9 +38,9 @@ module.exports = {
         .setRequired(false))
       .addIntegerOption((option) => option
         .setName('hp')
-        .setDescription(`Boss health (default ${DEFAULT_HP.toLocaleString()}).`)
+        .setDescription(`Boss health (default ${DEFAULT_BOSS_HP.toLocaleString()}, max ${MAX_BOSS_HP.toLocaleString()}).`)
         .setMinValue(1000)
-        .setMaxValue(1000000)
+        .setMaxValue(MAX_BOSS_HP)
         .setRequired(false)))
     .addSubcommand((sub) => sub
       .setName('schedule')
@@ -58,9 +64,9 @@ module.exports = {
         .setRequired(false))
       .addIntegerOption((option) => option
         .setName('hp')
-        .setDescription(`Boss health (default ${DEFAULT_HP.toLocaleString()}).`)
+        .setDescription(`Boss health (default ${DEFAULT_BOSS_HP.toLocaleString()}, max ${MAX_BOSS_HP.toLocaleString()}).`)
         .setMinValue(1000)
-        .setMaxValue(1000000)
+        .setMaxValue(MAX_BOSS_HP)
         .setRequired(false)))
     .addSubcommand((sub) => sub
       .setName('unschedule')
@@ -94,7 +100,7 @@ module.exports = {
       }
 
       const skin = interaction.options.getString('skin') || 'golem';
-      const hp = interaction.options.getInteger('hp') ?? DEFAULT_HP;
+      const hp = normalizeBossHp(interaction.options.getInteger('hp'));
       const { boss } = await spawnBoss({ client: interaction.client, guildId, channel, name: null, skinKey: skin, hp });
       return interaction.editReply(`✅ **${boss.name}** has spawned in ${channel}! Use the Attack button to fight.`);
     }
@@ -114,7 +120,7 @@ module.exports = {
             hour: interaction.options.getInteger('hour'),
             minute: interaction.options.getInteger('minute'),
             channelId: channel.id,
-            hp: interaction.options.getInteger('hp') ?? DEFAULT_HP,
+            hp: normalizeBossHp(interaction.options.getInteger('hp')),
             lastPostedDate: null,
           },
         },

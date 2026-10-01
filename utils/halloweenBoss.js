@@ -9,6 +9,9 @@ const { logBossDefeated, logBossSpawned } = require('./halloweenLog');
 const HalloweenBoss = require('../models/HalloweenBoss');
 
 const LEADERBOARD_CHANNEL_ID = '1549040166964957265';
+const DEFAULT_BOSS_HP = 5000;
+const MIN_BOSS_HP = 1000;
+const MAX_BOSS_HP = 10000;
 const BOSS_ASSET_DIRS = [
   path.join(__dirname, '../Assets/halloween'),
   path.join(__dirname, '../assets/halloween'),
@@ -40,6 +43,12 @@ const DEFAULT_SKIN = 'golem';
 // from BOSS_SKINS so a skin can exist (manually startable) without being
 // part of the daily rotation.
 const BOSS_ROTATION = ['golem', 'superhogs'];
+
+function normalizeBossHp(value) {
+  const hp = Number(value);
+  if (!Number.isFinite(hp)) return DEFAULT_BOSS_HP;
+  return Math.min(MAX_BOSS_HP, Math.max(MIN_BOSS_HP, Math.floor(hp)));
+}
 
 function getSkin(skinKey) {
   return BOSS_SKINS[skinKey] || BOSS_SKINS[DEFAULT_SKIN];
@@ -160,14 +169,15 @@ function getBossImageAttachment(boss) {
 async function spawnBoss({ client, guildId, channel, name, skinKey, hp }) {
   const skin = getSkin(skinKey);
   const bossName = name || skin.defaultName;
+  const bossHp = normalizeBossHp(hp);
 
   const boss = await HalloweenBoss.create({
     guildId,
     channelId: channel.id,
     name: bossName,
     skin: skinKey,
-    maxHP: hp,
-    currentHP: hp,
+    maxHP: bossHp,
+    currentHP: bossHp,
     active: true,
     participants: [],
   });
@@ -257,6 +267,10 @@ async function finishBoss(client, boss, { endedByStaff = false } = {}) {
 
 module.exports = {
   LEADERBOARD_CHANNEL_ID,
+  DEFAULT_BOSS_HP,
+  MIN_BOSS_HP,
+  MAX_BOSS_HP,
+  normalizeBossHp,
   BOSS_SKINS,
   DEFAULT_SKIN,
   BOSS_ROTATION,
