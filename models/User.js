@@ -10,6 +10,7 @@ const userSchema = new mongoose.Schema({
   candy: { type: Number, default: 0 },
   inventory: { type: [mongoose.Schema.Types.Mixed], default: [] },
   starterBonusClaimed: { type: Boolean, default: false },
+  lastHeistAwardId: { type: String, default: null },
 });
 
 // Make sure one user document per person per server

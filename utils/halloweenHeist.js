@@ -1,0 +1,399 @@
+const { randomUUID } = require('node:crypto');
+const {
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  EmbedBuilder,
+} = require('discord.js');
+const HalloweenHeist = require('../models/HalloweenHeist');
+const User = require('../models/User');
+
+const JOIN_WINDOW_MS = 60 * 1000;
+const JOIN_BUTTON_EMOJI = { name: '502736pumpkin', id: '1550187604811710544', animated: true };
+const POINTS_EMOJI = '<:687657pumpkin:1549044780863070258>';
+const SKULL_EMOJI = '<:623778ghost:1549040963886915624>';
+const ACTIVE_STATUSES = ['joining', 'processing'];
+
+const MAPS = [
+  'Bloodmoon Bank',
+  'Graveyard Gold Vault',
+  'Witchlight Casino',
+  'The Haunted Mint',
+  'Midnight Museum',
+];
+const TITLES = [
+  'The Midnight Heist',
+  'The Cursed Coin Job',
+  'Operation Pumpkin Vault',
+  'The Ghostlight Getaway',
+  'One Last Treat',
+];
+const WIN_STORIES = [
+  'slipped through a cursed vent, grabbed the glittering loot, and escaped as the skeleton guards argued over a map upside down.',
+  'distracted the vampire guards with a suspiciously realistic squeaky bat and scooped up the treasure.',
+  'dodged the moonbeam lasers, pocketed the pumpkin gold, and vanished in a cloud of cinnamon-scented smoke.',
+  'found the secret vault behind a portrait, borrowed its treasure, and left a thank-you note for the ghost.',
+];
+const LOSS_STORIES = [
+  'tiptoed into the vault, but a tiny ghost in tap shoes spotted the loot and chased them into the fog.',
+  'reached for the cursed pumpkin, which yelled “Boo!” so loudly that every skeleton guard woke up.',
+  'tripped a glitter-covered trap and got tangled in a net while the vampire guards applauded politely.',
+  'opened the wrong door and stumbled into the monster break room during karaoke night.',
+];
+
+const timers = new Map();
+const processingSessions = new Set();
+const lobbyRefreshes = new Map();
+
+function randomItem(items) {
+  return items[Math.floor(Math.random() * items.length)];
+}
+
+function rollHeistOutcome() {
+  const escapes = Math.random() < 0.5;
+  return {
+    outcome: escapes ? 'escape' : 'caught',
+    points: escapes
+      ? Math.floor(Math.random() * 201) + 100
+      : -(Math.floor(Math.random() * 141) + 50),
+  };
+}
+
+function buildLobbyPayload(heist) {
+  const timeLeft = Math.max(0, Math.ceil((heist.joinEndsAt.getTime() - Date.now()) / 1000));
+  const joining = heist.status === 'joining';
+  const embed = new EmbedBuilder()
+    .setColor('#FF7518')
+    .setTitle('🎃 HALLOWEEN HEIST')
+    .setDescription(
+      `🗺️ **MAP:** ${heist.map}\n` +
+      `🎭 **${heist.title}**\n\n` +
+      `The vault opens in ${joining ? `${timeLeft} seconds` : 'one minute'}...\n\n` +
+      '💰 Join the heist to take your chance at the loot!\n' +
+      '🎃 Possible reward: **+100 to +300 Points**\n' +
+      '💀 Possible loss: **-50 to -190 Points**\n\n' +
+      `👥 **Participants:** ${heist.participants.length}\n\n` +
+      (joining ? `⏳ Joining closes in ${timeLeft} seconds...` : '⏳ Joining is closed. The crew is taking turns...')
+    );
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`heist:join:${heist.sessionId}`)
+      .setLabel('Join Heist')
+      .setEmoji(JOIN_BUTTON_EMOJI)
+      .setStyle(ButtonStyle.Success)
+      .setDisabled(!joining)
+  );
+  return { embeds: [embed], components: [row] };
+}
+
+async function createHeistSession({ guildId, channelId }) {
+  const now = new Date();
+  const sessionId = randomUUID();
+  const fields = {
+    sessionId,
+    status: 'joining',
+    channelId,
+    messageId: null,
+    map: randomItem(MAPS),
+    title: randomItem(TITLES),
+    joinEndsAt: new Date(now.getTime() + JOIN_WINDOW_MS),
+    participants: [],
+    nextParticipantIndex: 0,
+    startedAt: now,
+    finishedAt: null,
+  };
+
+  const previous = await HalloweenHeist.findOne({ guildId });
+  if (previous && ACTIVE_STATUSES.includes(previous.status)) return null;
+
+  if (previous) {
+    return HalloweenHeist.findOneAndUpdate(
+      { _id: previous._id, status: previous.status },
+      { $set: fields },
+      { new: true }
+    );
+  }
+
+  try {
+    return await HalloweenHeist.create({ guildId, ...fields });
+  } catch (error) {
+    if (error.code === 11000) return null;
+    throw error;
+  }
+}
+
+function fallbackStory(outcome, map) {
+  const stories = outcome === 'escape' ? WIN_STORIES : LOSS_STORIES;
+  return `${randomItem(stories)} The whole thing went down at ${map}.`;
+}
+
+async function generateStory({ userId, map, title, outcome, points }) {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) return fallbackStory(outcome, map);
+
+  try {
+    const response = await fetch('https://api.openai.com/v1/responses', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      signal: AbortSignal.timeout(15000),
+      body: JSON.stringify({
+        model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
+        instructions:
+          'Write a short, entertaining Halloween heist story in 1 or 2 sentences. ' +
+          'Naturally describe the supplied outcome using the map and title. Make it creepy, funny, chaotic, or surprising. ' +
+          'Return only the story. Do not include a participant mention, point amount, point result, labels, headings, or explanation. ' +
+          'Never use the labels Win, Loss, Victory, Defeat, Heist Success, or Heist Failed.',
+        input: JSON.stringify({ participantMention: `<@${userId}>`, map, title, outcome, exactPoints: points }),
+        max_output_tokens: 100,
+      }),
+    });
+    if (!response.ok) throw new Error(`OpenAI returned HTTP ${response.status}`);
+    const payload = await response.json();
+    const rawStory = payload.output_text || payload.output
+      ?.flatMap((block) => block.content || [])
+      .find((item) => item.type === 'output_text')?.text;
+    if (!rawStory) throw new Error('OpenAI returned no story text.');
+
+    const cleaned = rawStory
+      .replace(/<@!?\d+>/g, '')
+      .replace(/@everyone|@here/g, 'everyone')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .replace(/^['"“]|['"”]$/g, '');
+    const sentences = cleaned.match(/[^.!?]+[.!?]+|[^.!?]+$/g) || [];
+    return sentences.slice(0, 2).join(' ').trim() || fallbackStory(outcome, map);
+  } catch (error) {
+    console.error('[halloweenHeist] story generation failed:', error.message);
+    return fallbackStory(outcome, map);
+  }
+}
+
+async function applyHeistPoints(heist, participant) {
+  try {
+    await User.findOneAndUpdate(
+      {
+        guildId: heist.guildId,
+        userId: participant.userId,
+        lastHeistAwardId: { $ne: heist.sessionId },
+      },
+      {
+        $inc: { halloweenPoints: participant.points },
+        $set: { lastHeistAwardId: heist.sessionId },
+      },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    );
+  } catch (error) {
+    if (error.code !== 11000) throw error;
+    const account = await User.findOne({ guildId: heist.guildId, userId: participant.userId })
+      .select('lastHeistAwardId')
+      .lean();
+    if (account?.lastHeistAwardId !== heist.sessionId) throw error;
+  }
+}
+
+function resultLine(participant) {
+  const emoji = participant.outcome === 'escape' ? POINTS_EMOJI : SKULL_EMOJI;
+  const points = `${participant.points > 0 ? '+' : ''}${participant.points}`;
+  return `<@${participant.userId}> ${participant.story} ${emoji} ${points} Points`;
+}
+
+async function startHeist(client, guildId, channel) {
+  const heist = await createHeistSession({ guildId, channelId: channel.id });
+  if (!heist) return { started: false };
+
+  try {
+    const message = await channel.send(buildLobbyPayload(heist));
+    heist.messageId = message.id;
+    await heist.save();
+    scheduleJoinClose(client, heist);
+    return { started: true, heist, message };
+  } catch (error) {
+    heist.status = 'cancelled';
+    heist.finishedAt = new Date();
+    await heist.save().catch(() => {});
+    throw error;
+  }
+}
+
+function scheduleJoinClose(client, heist) {
+  const existing = timers.get(heist.sessionId);
+  if (existing) clearTimeout(existing);
+  const delay = Math.max(0, heist.joinEndsAt.getTime() - Date.now());
+  const timer = setTimeout(() => {
+    timers.delete(heist.sessionId);
+    closeJoining(client, heist.sessionId).catch((error) => {
+      console.error('[halloweenHeist] failed to close joining:', error);
+    });
+  }, delay);
+  timers.set(heist.sessionId, timer);
+}
+
+async function updateLobbyMessage(client, heist, payload) {
+  if (!heist.messageId) return;
+  const channel = await client.channels.fetch(heist.channelId).catch(() => null);
+  if (!channel) return;
+  const message = await channel.messages.fetch(heist.messageId).catch(() => null);
+  if (message) await message.edit(payload).catch((error) => {
+    console.error('[halloweenHeist] lobby update failed:', error.message);
+  });
+}
+
+async function refreshJoiningLobby(client, sessionId) {
+  const previous = lobbyRefreshes.get(sessionId) || Promise.resolve();
+  const refresh = previous.catch(() => {}).then(async () => {
+    const latest = await HalloweenHeist.findOne({ sessionId });
+    if (!latest) return;
+    await updateLobbyMessage(client, latest, buildLobbyPayload(latest));
+  });
+  lobbyRefreshes.set(sessionId, refresh);
+  try {
+    await refresh;
+  } finally {
+    if (lobbyRefreshes.get(sessionId) === refresh) lobbyRefreshes.delete(sessionId);
+  }
+}
+
+async function closeJoining(client, sessionId) {
+  const heist = await HalloweenHeist.findOne({ sessionId, status: 'joining' });
+  if (!heist) return;
+
+  if (heist.participants.length === 0) {
+    heist.status = 'cancelled';
+    heist.finishedAt = new Date();
+    await heist.save();
+    await updateLobbyMessage(client, heist, {
+      embeds: [new EmbedBuilder()
+        .setColor('#95A5A6')
+        .setTitle('🎃 Heist Cancelled')
+        .setDescription(`Nobody dared to enter **${heist.map}**. The vault stays closed.`)],
+      components: [],
+    });
+    return;
+  }
+
+  heist.status = 'processing';
+  await heist.save();
+  await updateLobbyMessage(client, heist, buildLobbyPayload(heist));
+  await processHeist(client, sessionId);
+}
+
+async function processHeist(client, sessionId) {
+  if (processingSessions.has(sessionId)) return;
+  processingSessions.add(sessionId);
+
+  try {
+    while (true) {
+      const heist = await HalloweenHeist.findOne({ sessionId, status: 'processing' });
+      if (!heist) return;
+
+      const participant = heist.participants.find((entry) => !entry.processed);
+      if (!participant) {
+        heist.status = 'finished';
+        heist.finishedAt = new Date();
+        await heist.save();
+        return;
+      }
+
+      if (!participant.story) {
+        const roll = rollHeistOutcome();
+        participant.outcome = roll.outcome;
+        participant.points = roll.points;
+        participant.story = await generateStory({
+          userId: participant.userId,
+          map: heist.map,
+          title: heist.title,
+          outcome: participant.outcome,
+          points: participant.points,
+        });
+        await heist.save();
+      }
+
+      if (!participant.rewardApplied) {
+        await applyHeistPoints(heist, participant);
+        participant.rewardApplied = true;
+        await heist.save();
+      }
+
+      if (!participant.resultSent) {
+        const channel = await client.channels.fetch(heist.channelId);
+        await channel.send({
+          content: resultLine(participant),
+          allowedMentions: { users: [participant.userId] },
+        });
+        participant.resultSent = true;
+        await heist.save();
+      }
+
+      participant.processed = true;
+      heist.nextParticipantIndex += 1;
+      await heist.save();
+    }
+  } finally {
+    processingSessions.delete(sessionId);
+  }
+}
+
+async function joinHeist(client, interaction, sessionId) {
+  const now = new Date();
+  const userId = interaction.user.id;
+  const current = await HalloweenHeist.findOne({ sessionId });
+  if (!current || current.status !== 'joining' || current.joinEndsAt <= now) {
+    return { joined: false, reason: 'closed' };
+  }
+  if (current.participants.some((participant) => participant.userId === userId)) {
+    return { joined: false, reason: 'duplicate' };
+  }
+
+  const heist = await HalloweenHeist.findOneAndUpdate(
+    {
+      sessionId,
+      status: 'joining',
+      joinEndsAt: { $gt: now },
+      'participants.userId': { $ne: userId },
+    },
+    { $push: { participants: { userId } } },
+    { new: true }
+  );
+  if (!heist) {
+    const latest = await HalloweenHeist.findOne({ sessionId });
+    if (latest?.participants.some((participant) => participant.userId === userId)) {
+      return { joined: false, reason: 'duplicate' };
+    }
+    return { joined: false, reason: 'closed' };
+  }
+
+  await refreshJoiningLobby(client, sessionId).catch((error) => {
+    console.error('[halloweenHeist] participant count update failed:', error.message);
+  });
+  return { joined: true };
+}
+
+async function recoverHeists(client) {
+  const active = await HalloweenHeist.find({ status: { $in: ACTIVE_STATUSES } });
+  for (const heist of active) {
+    if (heist.status === 'joining') scheduleJoinClose(client, heist);
+    else processHeist(client, heist.sessionId).catch((error) => {
+      console.error('[halloweenHeist] participant processing failed:', error);
+    });
+  }
+}
+
+module.exports = {
+  JOIN_WINDOW_MS,
+  buildLobbyPayload,
+  rollHeistOutcome,
+  createHeistSession,
+  startHeist,
+  joinHeist,
+  closeJoining,
+  processHeist,
+  recoverHeists,
+  generateStory,
+  applyHeistPoints,
+  resultLine,
+  timers,
+  processingSessions,
+};
