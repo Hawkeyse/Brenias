@@ -29,16 +29,16 @@ const TITLES = [
   'One Last Treat',
 ];
 const WIN_STORIES = [
-  'slipped through a cursed vent, grabbed the glittering loot, and escaped as the skeleton guards argued over a map upside down.',
-  'distracted the vampire guards with a suspiciously realistic squeaky bat and scooped up the treasure.',
-  'dodged the moonbeam lasers, pocketed the pumpkin gold, and vanished in a cloud of cinnamon-scented smoke.',
-  'found the secret vault behind a portrait, borrowed its treasure, and left a thank-you note for the ghost.',
+  'I slipped through a cursed vent, grabbed the glowing loot, and vanished before the guards even noticed.',
+  'I tricked the vampire guards with a squeaky bat and escaped with the pumpkin gold in hand.',
+  'I dodged the moonbeam lasers, scooped up the treasure, and left the vault while the ghosts were still arguing.',
+  'I found the secret door, took the prize, and slipped away while the old portrait watched me go.',
 ];
 const LOSS_STORIES = [
-  'tiptoed into the vault, but a tiny ghost in tap shoes spotted the loot and chased them into the fog.',
-  'reached for the cursed pumpkin, which yelled “Boo!” so loudly that every skeleton guard woke up.',
-  'tripped a glitter-covered trap and got tangled in a net while the vampire guards applauded politely.',
-  'opened the wrong door and stumbled into the monster break room during karaoke night.',
+  'I reached for the loot, tripped the alarm, and got chased out of the vault by a laughing ghost.',
+  'I grabbed the cursed pumpkin and woke every guard in the room before I could escape.',
+  'I hit a glitter trap, got tangled in a net, and watched the vampire guards clap me out of the job.',
+  'I opened the wrong door and stumbled into the monster break room during karaoke night.',
 ];
 
 const timers = new Map();
@@ -124,7 +124,7 @@ async function createHeistSession({ guildId, channelId }) {
 
 function fallbackStory(outcome, map) {
   const stories = outcome === 'escape' ? WIN_STORIES : LOSS_STORIES;
-  return `${randomItem(stories)} The whole thing went down at ${map}.`;
+  return `${randomItem(stories)} It happened at ${map}.`;
 }
 
 async function generateStory({ userId, map, title, outcome, points }) {
@@ -142,12 +142,11 @@ async function generateStory({ userId, map, title, outcome, points }) {
       body: JSON.stringify({
         model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
         instructions:
-          'Write a short, entertaining Halloween heist story in 1 or 2 sentences. ' +
-          'Naturally describe the supplied outcome using the map and title. Make it creepy, funny, chaotic, or surprising. ' +
-          'Return only the story. Do not include a participant mention, point amount, point result, labels, headings, or explanation. ' +
-          'Never use the labels Win, Loss, Victory, Defeat, Heist Success, or Heist Failed.',
+          'Write one short sentence in plain English. Keep it simple and human, around 12 to 20 words. ' +
+          'Describe the heist clearly using the supplied map and title, and make the outcome easy to understand. ' +
+          'Do not include point totals, labels, headings, or extra explanation. Return only the story.',
         input: JSON.stringify({ participantMention: `<@${userId}>`, map, title, outcome, exactPoints: points }),
-        max_output_tokens: 100,
+        max_output_tokens: 60,
       }),
     });
     if (!response.ok) throw new Error(`OpenAI returned HTTP ${response.status}`);
@@ -164,7 +163,7 @@ async function generateStory({ userId, map, title, outcome, points }) {
       .trim()
       .replace(/^['"“]|['"”]$/g, '');
     const sentences = cleaned.match(/[^.!?]+[.!?]+|[^.!?]+$/g) || [];
-    return sentences.slice(0, 2).join(' ').trim() || fallbackStory(outcome, map);
+    return sentences.slice(0, 1).join(' ').trim() || fallbackStory(outcome, map);
   } catch (error) {
     console.error('[halloweenHeist] story generation failed:', error.message);
     return fallbackStory(outcome, map);
@@ -192,6 +191,27 @@ async function applyHeistPoints(heist, participant) {
       .lean();
     if (account?.lastHeistAwardId !== heist.sessionId) throw error;
   }
+}
+
+function buildResultEmbed(participant) {
+  const points = `${participant.points > 0 ? '+' : ''}${participant.points}`;
+  const outcomeText = participant.outcome === 'escape' ? 'Escaped with the loot.' : 'Got caught in the chaos.';
+  const story = participant.story || 'The crew ran into a mess and tried to make a clean getaway.';
+
+  return {
+    embeds: [
+      new EmbedBuilder()
+        .setColor(participant.outcome === 'escape' ? '#FFB703' : '#D62828')
+        .setTitle(participant.outcome === 'escape' ? '🎃 Heist Result' : '💀 Heist Result')
+        .setDescription(
+          `${story}\n\n` +
+          `**Outcome:** ${outcomeText}\n` +
+          `**Points:** ${points}`
+        )
+        .setFooter({ text: participant.outcome === 'escape' ? 'The vault is empty and the crew is gone.' : 'The guards won this round.' }),
+    ],
+    allowedMentions: { users: [participant.userId] },
+  };
 }
 
 function resultLine(participant) {
@@ -319,10 +339,7 @@ async function processHeist(client, sessionId) {
 
       if (!participant.resultSent) {
         const channel = await client.channels.fetch(heist.channelId);
-        await channel.send({
-          content: resultLine(participant),
-          allowedMentions: { users: [participant.userId] },
-        });
+        await channel.send(buildResultEmbed(participant));
         participant.resultSent = true;
         await heist.save();
       }
@@ -393,6 +410,7 @@ module.exports = {
   recoverHeists,
   generateStory,
   applyHeistPoints,
+  buildResultEmbed,
   resultLine,
   timers,
   processingSessions,
