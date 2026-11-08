@@ -1,7 +1,6 @@
 // events/doNotPost.js
 // "Do Not Post" trap channel system.
 //
-// On startup: posts a red warning embed in the trap channel (no auto-delete).
 // If a REGULAR user posts there:
 //   1. Render a screenshot of the message, send it to logs
 //   2. Delete the offending message
@@ -18,8 +17,6 @@ const { renderMessageScreenshot } = require('../utils/renderMessageScreenshot');
 const DO_NOT_POST_CHANNEL_ID = '1518027024550199386';
 const LOGS_CHANNEL_ID = '1366682681886244864';
 
-const ALERT_EMOJI = '<a:943832alertastaff2000:1518032355573371040>';
-const REDALERT_EMOJI = '<:13748redalert:1518032154528059462>';
 const BANHAMMER_EMOJI = '<:3899banhammer:1518032351270146128>';
 
 const TWO_HOURS_SECONDS = 2 * 60 * 60;
@@ -65,16 +62,6 @@ const MOD_TROLL_LINES = [
   'We hope your browser crashes before you hit save.'
 ];
 
-function buildWarningEmbed() {
-  return new EmbedBuilder()
-    .setColor('#ED4245')
-    .setTitle(`${ALERT_EMOJI} Do Not Post in This Channel`)
-    .setDescription(
-      `Do not post anything in this channel, including text, images, videos, links, or other media.\n\n` +
-      `${REDALERT_EMOJI} This channel is used to identify compromised accounts and unauthorized activity.`
-    );
-}
-
 function buildModTrollEmbed() {
   const line = MOD_TROLL_LINES[Math.floor(Math.random() * MOD_TROLL_LINES.length)];
   return new EmbedBuilder()
@@ -85,31 +72,6 @@ function buildModTrollEmbed() {
 }
 
 module.exports = (client) => {
-  // ── Startup warning post ────────────────────────────────────────────
-  // NOTE: This file is loaded from inside index.js's ClientReady handler,
-  // which means the 'ready' event has already fired by the time we get
-  // here — client.once(Events.ClientReady, ...) would never trigger.
-  // Since client.isReady() is true at this point, post immediately instead.
-  const postStartupWarning = async () => {
-    try {
-      const channel = await client.channels.fetch(DO_NOT_POST_CHANNEL_ID).catch(() => null);
-      if (!channel) {
-        console.error('[doNotPost] Channel not found, skipping startup post.');
-        return;
-      }
-      await channel.send({ embeds: [buildWarningEmbed()] });
-      console.log('[doNotPost] Startup warning posted.');
-    } catch (err) {
-      console.error('[doNotPost] Failed to post startup warning:', err);
-    }
-  };
-
-  if (client.isReady()) {
-    postStartupWarning();
-  } else {
-    client.once(Events.ClientReady, postStartupWarning);
-  }
-
   // ── Message watcher ──────────────────────────────────────────────────
   client.on(Events.MessageCreate, async (message) => {
     if (message.channel.id !== DO_NOT_POST_CHANNEL_ID) return;

@@ -66,7 +66,7 @@ console.log(`\n📊 Found ${commands.length} unique commands to deploy`);
 //                  DEPLOY CONFIG
 // ────────────────────────────────────────────────
 const CLIENT_ID = process.env.CLIENT_ID;
-const GUILD_ID = process.env.GUILD_ID;
+const GUILD_ID = process.env.GUILD_ID || '716722614839541920';
 const TOKEN = process.env.DISCORD_TOKEN;
 
 const isGlobal = process.env.GLOBAL_DEPLOY === 'true' || !GUILD_ID;

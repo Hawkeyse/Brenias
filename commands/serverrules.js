@@ -15,7 +15,7 @@ module.exports = {
     const bottom = divider.repeat(15);
     const send = async (embed) => await interaction.channel.send({ embeds: [embed] });
     // 1. Banner
-    await send(new EmbedBuilder().setImage('https://i.imgur.com/vDMF5Jq.jpg').setColor(color));
+    await send(new EmbedBuilder().setImage('https://i.imgur.com/4KjY8hL.png').setColor(color));
     // 2. Rules — classic CF6/BF6 style, your exact text
     const rules = [
       `${top}\n\n${cf} **Don’t @everyone**\n${bf} You can’t use @everyone or @here on this server. These tags are only for staff announcements. Using them incorrectly causes unnecessary notifications and bothers other members. If you need help, open a ticket or message staff. Repeated misuse will result in warnings or further action.\n\n${cf} **Always be polite**\n${bf} Everyone should feel safe and welcome here. Insults, harassment, bullying, or trying to start fights are not allowed. Do not bring personal conflicts into the server—use the ticket system so staff can handle it. Depending on severity, punishments may include mutes, kicks, or bans.`,
