@@ -13,31 +13,37 @@ module.exports = {
     .setDescription('Post the suggestion panel in the designated channel.'),
 
   async execute(interaction) {
-    // Replace with your actual suggestion panel channel ID
-    const panelChannel = interaction.client.channels.cache.get('1443369483657019524');
+    const panelChannel = await interaction.client.channels.fetch('1443369483657019524').catch((error) => {
+      console.error('[suggestion] Failed to fetch panel channel:', error);
+      return null;
+    });
     
     if (!panelChannel) {
       return interaction.reply({ 
-        content: 'Suggestion panel channel not found!', 
+        content: 'I could not find the suggestion panel channel. Please check the configured channel ID and my access.',
         ephemeral: true 
       });
     }
 
     const embed = new EmbedBuilder()
-      .setColor(0x9B59B6) // or your preferred color, e.g. purple-ish
-      .setTitle('💡 Have a suggestion for the Culzmac Community?')
+      .setColor(0x5865F2)
+      .setAuthor({ name: 'CULZMAC COMMUNITY  •  SUGGESTIONS' })
+      .setTitle('Help shape our community')
       .setDescription(
-        'Click <:9231_Message_Sent:1443371841241616486> to share it!\n\n' +
-        '<:6417_ModMute:1465990613269872720> Please note: Any suggestions that violate server rules ' +
-        'or the Terms of Service, including threads, will be removed.'
+        'Have an idea that could make the server better? Share it with the community and let members discuss and vote.'
       );
+    embed.addFields(
+      { name: 'How it works', value: 'Submit an idea, then use the buttons on your post to vote or join the discussion.', inline: false },
+      { name: 'Keep it constructive', value: 'Suggestions must follow the server rules and Discord Terms of Service. Inappropriate posts may be removed.', inline: false }
+    );
+    embed.setFooter({ text: 'Community Suggestions' });
 
     const row = new ActionRowBuilder()
       .addComponents(
         new ButtonBuilder()
           .setCustomId('create-suggestion')
           .setEmoji('<:9231_Message_Sent:1443371841241616486>')
-          .setLabel('create a suggestion')
+          .setLabel('Share a suggestion')
           .setStyle(ButtonStyle.Primary)
       );
 

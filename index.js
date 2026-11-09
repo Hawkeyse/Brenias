@@ -27,8 +27,141 @@ const path = require('path');
 const fetch = require('node-fetch'); // explicit import — safe even on older Node versions
 
 const User = require('./models/User');
+const Suggestion = require('./models/suggestion');
 const { getLevelFromXP, assignRolesForLevel } = require('./utils');
 const AutomodConfig = require('./models/AutomodConfig');
+
+function buildSuggestionEmbed(suggestion) {
+  const upvotes = suggestion.upvotes || 0;
+  const downvotes = suggestion.downvotes || 0;
+  const totalVotes = upvotes + downvotes;
+  const support = totalVotes ? Math.round((upvotes / totalVotes) * 100) : 0;
+  const filled = Math.round(support / 10);
+  const voteBar = '🟩'.repeat(filled) + '⬜'.repeat(10 - filled);
+  const embed = new EmbedBuilder()
+    .setColor(0x5865F2)
+    .setTitle(`💡 ${suggestion.title}`)
+    .setDescription(suggestion.description)
+    .addFields({
+      name: 'Community vote',
+      value:
+        `${voteBar}\n` +
+        `<:23646yes:1443367106455539876> **${upvotes}**  •  ` +
+        `<:92042no1:1443367117637288097> **${downvotes}**\n` +
+        `**${support}% support**`,
+      inline: false,
+    })
+    .setFooter({ text: 'Community Suggestions • Vote or join the discussion below' })
+    .setTimestamp(suggestion.createdAt || new Date());
+
+  if (suggestion.username) {
+    embed.setAuthor({
+      name: `Suggested by ${suggestion.username}`,
+      ...(suggestion.avatarURL ? { iconURL: suggestion.avatarURL } : {}),
+    });
+  }
+
+  return embed;
+}
+
+function buildSuggestionButtons() {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId('sug_yes')
+      .setEmoji('<:23646yes:1443367106455539876>')
+      .setLabel('Support')
+      .setStyle(ButtonStyle.Success),
+    new ButtonBuilder()
+      .setCustomId('sug_no')
+      .setEmoji('<:92042no1:1443367117637288097>')
+      .setLabel('Oppose')
+      .setStyle(ButtonStyle.Danger),
+    new ButtonBuilder()
+      .setCustomId('sug_view')
+      .setEmoji('<:38893eyes:1443367212021710960>')
+      .setLabel('View votes')
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId('sug_discuss')
+      .setEmoji('<:9231_Message_Sent:1443371841241616486>')
+      .setLabel('Discuss')
+      .setStyle(ButtonStyle.Primary)
+  );
+}
+
+async function getSuggestionForMessage(interaction) {
+  const messageId = interaction.message.id;
+  let suggestion = await Suggestion.findOne({ messageId });
+  if (suggestion) return suggestion;
+
+  const embed = interaction.message.embeds[0];
+  if (!interaction.guildId || !embed?.description) {
+    throw new Error(`Suggestion data is missing for message ${messageId}`);
+  }
+
+  const match = embed.description.match(/^\*\*(.+?)\*\*(?:\r?\n\r?\n)?([\s\S]*)$/);
+  const voteField = embed.fields.find(field => /vote/i.test(field.name));
+  const displayedVotes = [...(voteField?.value.matchAll(/\*\*(\d+)\*\*/g) || [])]
+    .slice(0, 2)
+    .map(([, count]) => Number(count));
+
+  suggestion = new Suggestion({
+    id: messageId,
+    guildId: interaction.guildId,
+    userId: null,
+    username: embed.author?.name || 'Legacy suggestion',
+    avatarURL: embed.author?.iconURL || null,
+    title: match?.[1] || embed.title?.replace(/^💡\s*/, '') || 'Suggestion',
+    description: match?.[2] || embed.description,
+    messageId,
+    upvotes: displayedVotes[0] || 0,
+    downvotes: displayedVotes[1] || 0,
+  });
+
+  try {
+    await suggestion.save();
+    return suggestion;
+  } catch (error) {
+    if (error.code !== 11000) throw error;
+    suggestion = await Suggestion.findOne({ messageId });
+    if (!suggestion) throw error;
+    return suggestion;
+  }
+}
+
+async function castSuggestionVote(messageId, userId, vote) {
+  const votePath = `voters.${userId}`;
+
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const suggestion = await Suggestion.findOne({ messageId });
+    if (!suggestion) throw new Error(`Suggestion not found for message ${messageId}`);
+
+    const previousVote = suggestion.voters.get(userId) || null;
+    const filter = { messageId };
+    const update = {};
+
+    if (previousVote === vote) {
+      filter[votePath] = vote;
+      update.$unset = { [votePath]: '' };
+      update.$inc = vote === 'up'
+        ? { upvotes: -1 }
+        : { downvotes: -1 };
+    } else {
+      filter[votePath] = previousVote || { $exists: false };
+      update.$set = { [votePath]: vote };
+      update.$inc = {
+        [vote === 'up' ? 'upvotes' : 'downvotes']: 1,
+        ...(previousVote === 'up' ? { upvotes: -1 } : {}),
+        ...(previousVote === 'down' ? { downvotes: -1 } : {}),
+      };
+    }
+
+    const updated = await Suggestion.findOneAndUpdate(filter, update, { new: true });
+    if (updated) return updated;
+  }
+
+  throw new Error(`Could not update vote for suggestion ${messageId} after concurrent changes`);
+}
 
 // ────────────────────────────────────────────────
 //                CREATE CLIENT FIRST
@@ -381,9 +514,6 @@ client.on('messageCreate', async (message) => {
 // Verification system is loaded automatically by loadEvents() below
 // (events/memberLogs.js handles join verification)
 
-// In-memory vote storage
-client.suggestionVotes = new Map();
-
 // Commands collection
 client.commands = new Collection();
 
@@ -501,32 +631,129 @@ client.on(Events.InteractionCreate, async interaction => {
     return;
   }
 
+  if (interaction.isButton() && ['sug_yes', 'sug_no', 'sug_view', 'sug_discuss'].includes(interaction.customId)) {
+    try {
+      if (interaction.customId === 'sug_yes' || interaction.customId === 'sug_no') {
+        await interaction.deferUpdate();
+        await getSuggestionForMessage(interaction);
+        const suggestion = await castSuggestionVote(
+          interaction.message.id,
+          interaction.user.id,
+          interaction.customId === 'sug_yes' ? 'up' : 'down'
+        );
+        await interaction.editReply({
+          embeds: [buildSuggestionEmbed(suggestion)],
+          components: [buildSuggestionButtons()],
+        });
+        return;
+      }
+
+      await interaction.deferReply({ ephemeral: true });
+      const suggestion = await getSuggestionForMessage(interaction);
+
+      if (interaction.customId === 'sug_view') {
+        const voters = Array.from(suggestion.voters.entries());
+        const formatVoters = (vote) => {
+          const matchingVoters = voters.filter(([, value]) => value === vote);
+          const names = matchingVoters.slice(0, 20).map(([userId]) => `<@${userId}>`);
+          const remaining = matchingVoters.length - names.length;
+          return names.length
+            ? `${names.join(', ')}${remaining > 0 ? `, and ${remaining} more` : ''}`
+            : 'No votes yet';
+        };
+
+        await interaction.editReply({
+          content:
+            `**Votes on: ${suggestion.title}**\n\n` +
+            `✅ **Support (${suggestion.upvotes})**\n${formatVoters('up')}\n\n` +
+            `❌ **Oppose (${suggestion.downvotes})**\n${formatVoters('down')}`,
+          allowedMentions: { parse: [] },
+        });
+        return;
+      }
+
+      let thread = suggestion.threadId
+        ? await interaction.client.channels.fetch(suggestion.threadId).catch(error => {
+            if (error.code === 10003) return null;
+            throw error;
+          })
+        : null;
+
+      if (thread?.isThread() && thread.archived) {
+        await thread.setArchived(false);
+      }
+      if (!thread) {
+        thread = await interaction.message.startThread({
+          name: `Discussion: ${suggestion.title}`.slice(0, 100),
+          autoArchiveDuration: 1440,
+        });
+        await Suggestion.updateOne({ _id: suggestion._id }, { $set: { threadId: thread.id } });
+      }
+
+      await interaction.editReply({ content: `Join the discussion: ${thread.url}` });
+    } catch (error) {
+      console.error('[suggestion] Button interaction failed:', error);
+      const response = {
+        content: 'I could not complete that action. Please try again in a moment.',
+        ephemeral: true,
+      };
+      if (interaction.deferred || interaction.replied) {
+        await interaction.followUp(response).catch(() => {});
+      } else {
+        await interaction.reply(response).catch(() => {});
+      }
+    }
+    return;
+  }
+
   if (interaction.isModalSubmit() && interaction.customId === 'suggestion_submit_modal') {
     await interaction.deferReply({ ephemeral: true });
 
-    const title = interaction.fields.getTextInputValue('sug_title').trim();
-    const desc = interaction.fields.getTextInputValue('sug_desc').trim();
+    let suggestionPosted = false;
+    try {
+      const title = interaction.fields.getTextInputValue('sug_title').trim();
+      const desc = interaction.fields.getTextInputValue('sug_desc').trim();
 
-    if (!title || !desc) return interaction.editReply({ content: 'Both title and description are required.' });
+      if (!title || !desc) {
+        return interaction.editReply({ content: 'Both a title and details are required.' });
+      }
 
-    const channel = interaction.guild.channels.cache.get(SUGGESTION_CHANNEL_ID);
-    if (!channel) return interaction.editReply({ content: 'Suggestion channel not found.' });
+      const channel = await interaction.client.channels.fetch(SUGGESTION_CHANNEL_ID);
+      if (!channel) return interaction.editReply({ content: 'Suggestion channel not found.' });
 
-    const embed = new EmbedBuilder()
-      .setColor(interaction.user.accentColor || 0xF1C40F)
-      .setAuthor({ name: interaction.user.tag, iconURL: interaction.user.displayAvatarURL({ dynamic: true }) })
-      .setDescription(`**${title}**\n\n${desc}`)
-      .addFields({ name: 'Votes', value: `<:23646yes:1443367106455539876> **0**   <:92042no1:1443367117637288097> **0**`, inline: true });
-
-    const buttons = new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId('sug_yes').setEmoji('<:23646yes:1443367106455539876>').setLabel('Yes').setStyle(ButtonStyle.Success),
-      new ButtonBuilder().setCustomId('sug_no').setEmoji('<:92042no1:1443367117637288097>').setLabel('No').setStyle(ButtonStyle.Danger),
-      new ButtonBuilder().setCustomId('sug_view').setEmoji('<:38893eyes:1443367212021710960>').setLabel('View Votes').setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId('sug_discuss').setEmoji('<:9231_Message_Sent:1443371841241616486>').setLabel('Discuss').setStyle(ButtonStyle.Primary)
-    );
-
-    await channel.send({ embeds: [embed], components: [buttons] });
-    await interaction.editReply({ content: '✅ Your suggestion has been posted!' });
+      const suggestion = {
+        title,
+        description: desc,
+        username: interaction.user.tag,
+        avatarURL: interaction.user.displayAvatarURL(),
+        upvotes: 0,
+        downvotes: 0,
+        createdAt: new Date(),
+      };
+      const suggestionMessage = await channel.send({
+        embeds: [buildSuggestionEmbed(suggestion)],
+        components: [buildSuggestionButtons()],
+      });
+      suggestionPosted = true;
+      await Suggestion.create({
+        id: suggestionMessage.id,
+        guildId: interaction.guildId,
+        userId: interaction.user.id,
+        username: interaction.user.tag,
+        avatarURL: suggestion.avatarURL,
+        title,
+        description: desc,
+        messageId: suggestionMessage.id,
+      });
+      await interaction.editReply({ content: '✅ Your suggestion has been posted!' });
+    } catch (error) {
+      console.error('[suggestion] Submission failed:', error);
+      await interaction.editReply({
+        content: suggestionPosted
+          ? 'Your suggestion was posted, but I could not finish saving its voting data. You can still try the buttons again.'
+          : 'I could not post your suggestion. Please try again in a moment.',
+      }).catch(() => {});
+    }
   }
 });
 

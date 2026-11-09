@@ -4,8 +4,9 @@ const mongoose = require('mongoose');
 module.exports = mongoose.model('Suggestion', new mongoose.Schema({
   id: { type: String, required: true, unique: true }, // e.g., timestamp or UUID
   guildId: { type: String, required: true },
-  userId: { type: String, required: true },
+  userId: { type: String, default: null },
   username: { type: String, required: true },
+  avatarURL: { type: String, default: null },
   title: { type: String, required: true },
   description: { type: String, required: true },
   messageId: { type: String, required: true }, // ID of the suggestion message in channel
