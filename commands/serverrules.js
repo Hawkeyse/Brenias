@@ -38,6 +38,11 @@ module.exports = {
         inline: false 
       },
       { 
+        name: 'Server Icon', 
+        value: '<@1365517283333509140>', 
+        inline: false 
+      },
+      { 
         name: 'Server Banner', 
         value: '<@1077302726943326349>', 
         inline: false 
