@@ -31,6 +31,10 @@ const Suggestion = require('./models/suggestion');
 const { getLevelFromXP, assignRolesForLevel } = require('./utils');
 const AutomodConfig = require('./models/AutomodConfig');
 
+const SUGGESTION_EMOJI = '<:232040suggestion:1569302885668233286>';
+const SUGGESTION_UPVOTE_EMOJI = '<:23646yes:1443367106455539876>';
+const SUGGESTION_DOWNVOTE_EMOJI = '<:92042no1:1443367117637288097>';
+
 function buildSuggestionEmbed(suggestion) {
   const upvotes = suggestion.upvotes || 0;
   const downvotes = suggestion.downvotes || 0;
@@ -40,19 +44,18 @@ function buildSuggestionEmbed(suggestion) {
   const voteBar = '🟩'.repeat(filled) + '⬜'.repeat(10 - filled);
   const embed = new EmbedBuilder()
     .setColor(0x5865F2)
-    .setTitle(`💡 ${suggestion.title}`)
+    .setTitle(`${SUGGESTION_EMOJI} ${suggestion.title}`)
     .setDescription(suggestion.description)
     .addFields({
-      name: 'Community vote',
+      name: 'COMMUNITY VOTE',
       value:
         `${voteBar}\n` +
-        `<:23646yes:1443367106455539876> **${upvotes}**  •  ` +
-        `<:92042no1:1443367117637288097> **${downvotes}**\n` +
+        `${SUGGESTION_UPVOTE_EMOJI} **${upvotes}**  •  ` +
+        `${SUGGESTION_DOWNVOTE_EMOJI} **${downvotes}**\n` +
         `**${support}% support**`,
       inline: false,
     })
-    .setFooter({ text: 'Community Suggestions • Vote or join the discussion below' })
-    .setTimestamp(suggestion.createdAt || new Date());
+    .setFooter({ text: 'Vote below • Discuss with the community' });
 
   if (suggestion.username) {
     embed.setAuthor({
@@ -68,12 +71,12 @@ function buildSuggestionButtons() {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId('sug_yes')
-      .setEmoji('<:23646yes:1443367106455539876>')
+      .setEmoji(SUGGESTION_UPVOTE_EMOJI)
       .setLabel('Support')
       .setStyle(ButtonStyle.Success),
     new ButtonBuilder()
       .setCustomId('sug_no')
-      .setEmoji('<:92042no1:1443367117637288097>')
+      .setEmoji(SUGGESTION_DOWNVOTE_EMOJI)
       .setLabel('Oppose')
       .setStyle(ButtonStyle.Danger),
     new ButtonBuilder()
@@ -671,10 +674,28 @@ client.on(Events.InteractionCreate, async interaction => {
         };
 
         await interaction.editReply({
-          content:
-            `**Votes on: ${suggestion.title}**\n\n` +
-            `✅ **Support (${suggestion.upvotes})**\n${formatVoters('up')}\n\n` +
-            `❌ **Oppose (${suggestion.downvotes})**\n${formatVoters('down')}`,
+          embeds: [
+            new EmbedBuilder()
+              .setColor(0x5865F2)
+              .setAuthor({ name: 'CULZMAC COMMUNITY  •  SUGGESTIONS' })
+              .setTitle(`${SUGGESTION_EMOJI} Vote breakdown`)
+              .setDescription(`**${suggestion.title}**`)
+              .addFields(
+                {
+                  name: `${SUGGESTION_UPVOTE_EMOJI} Support · ${suggestion.upvotes}`,
+                  value: formatVoters('up') || 'No votes yet — be the first to support.',
+                  inline: true,
+                },
+                {
+                  name: `${SUGGESTION_DOWNVOTE_EMOJI} Oppose · ${suggestion.downvotes}`,
+                  value: formatVoters('down') || 'No votes yet.',
+                  inline: true,
+                }
+              )
+              .setFooter({
+                text: `${suggestion.upvotes + suggestion.downvotes} total votes`,
+              }),
+          ],
           allowedMentions: { parse: [] },
         });
         return;

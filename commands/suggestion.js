@@ -28,7 +28,7 @@ module.exports = {
     const embed = new EmbedBuilder()
       .setColor(0x5865F2)
       .setAuthor({ name: 'CULZMAC COMMUNITY  •  SUGGESTIONS' })
-      .setTitle('Help shape our community')
+      .setTitle('<:232040suggestion:1569302885668233286> Help shape our community')
       .setDescription(
         'Have an idea that could make the server better? Share it with the community and let members discuss and vote.'
       );
@@ -42,7 +42,7 @@ module.exports = {
       .addComponents(
         new ButtonBuilder()
           .setCustomId('create-suggestion')
-          .setEmoji('<:9231_Message_Sent:1443371841241616486>')
+          .setEmoji('<:232040suggestion:1569302885668233286>')
           .setLabel('Share a suggestion')
           .setStyle(ButtonStyle.Primary)
       );
