@@ -627,7 +627,15 @@ client.on(Events.InteractionCreate, async interaction => {
       )
     );
 
-    await interaction.showModal(modal);
+    try {
+      await interaction.showModal(modal);
+    } catch (error) {
+      console.error('[suggestion] Could not open submission form:', error);
+      await interaction.reply({
+        content: 'I could not open the suggestion form. Please try again.',
+        ephemeral: true,
+      }).catch(() => {});
+    }
     return;
   }
 
